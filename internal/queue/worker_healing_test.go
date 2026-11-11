@@ -5,67 +5,46 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
 )
 
+// A failed attempt takes the tuner's next step. The step the coordinator can
+// still apply is the requeue and the TUNE event: the model override itself went
+// with the builtin loop (docs/harness-extraction.md, "What agentd loses").
 func TestWorkerTuneStepRequeuesAndAppliesNextAttemptOverride(t *testing.T) {
-	store := newWorkerStore()
+	store := newACPWorkerStore(t)
 	store.task.RetryCount = 1
-	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}
-	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}}
+	scriptTask(store, fakeagent.Step{Error: "tool crashed"})
 	sink := &recordingSink{}
 	tuner := NewParameterTuner(config.HealingConfig{
 		Enabled: true,
 		Steps:   []string{HealingStepLowerTemperature, HealingStepLowerTemperature},
 	})
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink, WorkerOptions{Tuner: tuner, ToolFailureStreak: 1})
+	worker := newACPWorker(t, store, &fakeGateway{}, &fakeSandbox{}, sink, WorkerOptions{Tuner: tuner})
 
 	worker.Process(context.Background(), store.task)
 
 	if store.task.RetryCount != 2 || store.task.State != models.TaskStateReady {
 		t.Fatalf("retries=%d state=%s", store.task.RetryCount, store.task.State)
 	}
-	if len(gw.requests) != 1 || gw.requests[0].Temperature != 0 {
-		t.Fatalf("requests = %#v", gw.requests)
-	}
 	if !sink.hasEvent("TUNE") {
 		t.Fatalf("events = %#v, want TUNE", sink.events)
 	}
 }
 
-func TestWorkerUpgradeModelOverride(t *testing.T) {
-	store := newWorkerStore()
-	store.task.RetryCount = 1
-	gw := &fakeGateway{content: "done"}
-	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"}}
-	tuner := NewParameterTuner(config.HealingConfig{
-		Enabled:         true,
-		Steps:           []string{HealingStepUpgradeModel},
-		UpgradeModel:    "gpt-strong",
-		UpgradeProvider: "openai",
-	})
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{Tuner: tuner})
-
-	worker.Process(context.Background(), store.task)
-
-	if len(gw.requests) != 1 || gw.requests[0].Model != "gpt-strong" || gw.requests[0].Provider != "openai" {
-		t.Fatalf("requests = %#v", gw.requests)
-	}
-}
-
 func TestWorkerHealingSplitBlocksTaskWithSubtasks(t *testing.T) {
-	store := newWorkerStore()
-	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}, nextContent: `{"too_complex":true,"subtasks":[{"title":"Smaller","description":"Do smaller"}]}`}
-	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}}
+	store := newACPWorkerStore(t)
+	scriptTask(store, fakeagent.Step{Error: "too complex for one turn"})
+	gw := &fakeGateway{content: `{"subtasks":[{"title":"Smaller","description":"Do smaller"}]}`}
 	tuner := NewParameterTuner(config.HealingConfig{
 		Enabled: true,
 		Steps:   []string{HealingStepSplitTask},
 	})
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{Tuner: tuner, ToolFailureStreak: 1})
+	worker := newACPWorker(t, store, gw, &fakeSandbox{}, nil, WorkerOptions{Tuner: tuner})
 
 	worker.Process(context.Background(), store.task)
 
@@ -75,14 +54,13 @@ func TestWorkerHealingSplitBlocksTaskWithSubtasks(t *testing.T) {
 }
 
 func TestWorkerHealingHumanHandoff(t *testing.T) {
-	store := newWorkerStore()
-	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}
-	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}}
+	store := newACPWorkerStore(t)
+	scriptTask(store, fakeagent.Step{Error: "tool crashed"})
 	tuner := NewParameterTuner(config.HealingConfig{
 		Enabled: true,
 		Steps:   []string{HealingStepHumanHandoff},
 	})
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{Tuner: tuner, ToolFailureStreak: 1})
+	worker := newACPWorker(t, store, &fakeGateway{}, &fakeSandbox{}, nil, WorkerOptions{Tuner: tuner})
 
 	worker.Process(context.Background(), store.task)
 

@@ -4,23 +4,21 @@ import (
 	"context"
 	"testing"
 
-	"agentd/internal/gateway"
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
 )
 
+// A task whose agent keeps failing is evicted once the retry budget is spent,
+// and the evicted task is never claimed again.
 func TestEvictedTaskIsNeverReClaimed(t *testing.T) {
 	store := newQueueStore()
 	store.seed(1, models.TaskStateReady)
-
-	gw := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "exit 1")}}
-	sb := &queueSandbox{
-		result: sandbox.Result{Success: false, ExitCode: 1},
-	}
-	breaker := NewCircuitBreaker()
+	store.tasks[0].Title = fakeagent.Script(fakeagent.Step{Error: "command failed"})
 	sink := &queueSink{}
-	worker := NewWorker(store, gw, sb, breaker, sink, WorkerOptions{MaxRetries: 3, ToolFailureStreak: 1})
+	acp, closeACP := newACPRuntime()
+	t.Cleanup(closeACP)
+	worker := NewWorker(store, &fakeGateway{}, nil, NewCircuitBreaker(), sink,
+		WorkerOptions{MaxRetries: 3, Routes: acpQueueRoutes(), ACP: acp})
 
 	ctx := context.Background()
 

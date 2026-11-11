@@ -99,6 +99,12 @@ type queueScenario struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	done          chan error
+	acp           *ACPRuntime
+	acpGateway    *fakeGateway
+	acpStarted    chan struct{}
+	acpStop       chan struct{}
+	closeACP      func()
+	useACP        bool
 	daemonStarted bool
 	lastQueued    int
 }
@@ -113,12 +119,20 @@ func (s *queueScenario) reset() {
 		case <-time.After(5 * time.Second):
 		}
 	}
+	if s.closeACP != nil {
+		s.closeACP()
+		s.closeACP = nil
+	}
+	if s.acp == nil {
+		s.acp, s.closeACP = newACPRuntime()
+	}
 	s.store = newQueueStore()
 	s.breaker = NewCircuitBreaker()
 	s.now = time.Now().UTC()
 	s.breaker.SetClockForTest(func() time.Time { return s.now })
 	s.gateway = &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
 	s.sandbox = &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
+	s.useACP = false
 	s.sink = &queueSink{}
 	s.maxRetries = DefaultWorkerMaxRetries
 	s.ctx = nil
@@ -129,7 +143,16 @@ func (s *queueScenario) reset() {
 }
 
 func (s *queueScenario) rebuild(maxWorkers int) {
-	s.worker = NewWorker(s.store, s.gateway, s.sandbox, s.breaker, s.sink, WorkerOptions{MaxRetries: s.maxRetries, ToolFailureStreak: 1})
+	var gw gateway.AIGateway = s.gateway
+	opts := WorkerOptions{MaxRetries: s.maxRetries, ToolFailureStreak: 1}
+	if s.useACP {
+		gw = s.acpGateway
+		// The breaker scenario needs a task that reaches an agent: the global
+		// breaker is closed by a task that completes, and only the ACP path
+		// completes one now.
+		opts.Routes, opts.ACP = acpQueueRoutes(), s.acp
+	}
+	s.worker = NewWorker(s.store, gw, s.sandbox, s.breaker, s.sink, opts)
 	s.daemon = NewDaemon(s.store, s.worker, nil, s.breaker, s.sink, DaemonOptions{
 		MaxWorkers: maxWorkers, Probe: s.probe, TaskInterval: time.Hour, IntakeInterval: time.Hour,
 	})

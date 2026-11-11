@@ -5,23 +5,24 @@ import (
 	"testing"
 	"time"
 
-	"agentd/internal/gateway"
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
 )
 
 // T-035: a probe slot spent on a tick that admitted no task must be released,
-// otherwise the breaker latches HALF_OPEN and needs an operator reset.
+// otherwise the breaker latches HALF_OPEN and needs an operator reset. The probe
+// task now succeeds on the agent, and a completed task is what closes the
+// breaker (commitSucceeded records it), as it did when the task ran in-process.
 func TestDispatchReleasesProbeSlotWhenQueueIsEmptyAtTimeout(t *testing.T) {
 	store := newQueueStore()
-	gateway := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
-	sb := &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
 	breaker := NewCircuitBreaker()
 	now := time.Now().UTC()
 	breaker.SetClockForTest(func() time.Time { return now })
 	sink := &queueSink{}
-	worker := NewWorker(store, gateway, sb, breaker, sink, WorkerOptions{MaxRetries: DefaultWorkerMaxRetries})
+	acp, closeACP := newACPRuntime()
+	t.Cleanup(closeACP)
+	worker := NewWorker(store, &fakeGateway{}, nil, breaker, sink,
+		WorkerOptions{MaxRetries: DefaultWorkerMaxRetries, Routes: acpQueueRoutes(), ACP: acp})
 	daemon := NewDaemon(store, worker, nil, breaker, sink, DaemonOptions{MaxWorkers: 3, TaskInterval: time.Hour})
 
 	for range 3 {
@@ -35,6 +36,7 @@ func TestDispatchReleasesProbeSlotWhenQueueIsEmptyAtTimeout(t *testing.T) {
 	}
 
 	store.seed(1, models.TaskStateReady)
+	store.tasks[0].Title = fakeagent.Script(acpReport("probe ok"))
 	dispatched, _, err := daemon.dispatch(ctx)
 	if err != nil {
 		t.Fatalf("dispatch() error = %v", err)

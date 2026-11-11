@@ -44,10 +44,8 @@ type queueSandbox struct {
 	blockOnCtx  bool
 	started     chan struct{}
 	cancelled   chan struct{}
-	unblock     chan struct{}
 	startedOnce sync.Once
 	cancelOnce  sync.Once
-	unblockOnce sync.Once
 }
 
 func (s *queueSandbox) Execute(ctx context.Context, _ sandbox.Payload) (sandbox.Result, error) {
@@ -55,29 +53,9 @@ func (s *queueSandbox) Execute(ctx context.Context, _ sandbox.Payload) (sandbox.
 		return s.result, s.err
 	}
 	s.startedOnce.Do(func() { close(s.started) })
-	if s.unblock != nil {
-		if err := ctx.Err(); err != nil {
-			s.cancelOnce.Do(func() { close(s.cancelled) })
-			return sandbox.Result{Success: false, ExitCode: -1}, err
-		}
-		select {
-		case <-ctx.Done():
-			s.cancelOnce.Do(func() { close(s.cancelled) })
-			return sandbox.Result{Success: false, ExitCode: -1}, ctx.Err()
-		case <-s.unblock:
-			return s.result, s.err
-		}
-	}
 	<-ctx.Done()
 	s.cancelOnce.Do(func() { close(s.cancelled) })
 	return sandbox.Result{Success: false, ExitCode: -1}, ctx.Err()
-}
-
-func (s *queueSandbox) unblockProbe() {
-	if s.unblock == nil {
-		return
-	}
-	s.unblockOnce.Do(func() { close(s.unblock) })
 }
 
 type queueSink struct {

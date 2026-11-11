@@ -3,14 +3,13 @@ package queue
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/cucumber/godog"
 
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
 
@@ -19,8 +18,7 @@ import (
 type daemonSafetyScenario struct {
 	store   *queueStore
 	breaker *CircuitBreaker
-	gateway *queueGateway
-	sb      *queueSandbox
+	gateway gateway.AIGateway
 	worker  *Worker
 	daemon  *Daemon
 	sink    *queueSink
@@ -28,6 +26,16 @@ type daemonSafetyScenario struct {
 	delays      []time.Duration
 	curDelay    time.Duration
 	dispatchErr error
+
+	// The deadline and panic scenarios run a task on the fake agent: after T-070
+	// the only thing a dispatched task runs is an agent, so the reaper has an
+	// agent process to cancel and a panic has to come from the agent's runtime.
+	acp        *ACPRuntime
+	closeACP   func()
+	acpStarted chan struct{}
+	acpStop    chan struct{}
+	panicAgent bool
+	useACP     bool
 }
 
 func newDaemonSafetyScenario() *daemonSafetyScenario {
@@ -69,9 +77,10 @@ func (s *daemonSafetyScenario) setTaskDeadline(_ context.Context, raw string) er
 	}
 	s.store = newQueueStore()
 	s.breaker = NewCircuitBreaker()
-	s.gateway = &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
+	s.gateway = &fakeGateway{}
 	s.sink = &queueSink{}
-	s.worker = NewWorker(s.store, s.gateway, nil, s.breaker, s.sink, WorkerOptions{})
+	s.useACP = true
+	s.rebuildWorker()
 	s.daemon = NewDaemon(s.store, s.worker, nil, s.breaker, s.sink, DaemonOptions{
 		MaxWorkers: 1, TaskInterval: time.Hour, TaskDeadline: d,
 		Probe: StaticPIDProbe{},
@@ -79,17 +88,41 @@ func (s *daemonSafetyScenario) setTaskDeadline(_ context.Context, raw string) er
 	return nil
 }
 
+// rebuildWorker builds the worker this scenario dispatches with. The agent's
+// runtime signals when a prompt starts and when the reaper's cancellation kills
+// the agent process.
+func (s *daemonSafetyScenario) rebuildWorker() {
+	if s.closeACP != nil {
+		s.closeACP()
+	}
+	s.acpStarted, s.acpStop = make(chan struct{}), make(chan struct{})
+	if s.panicAgent {
+		s.acp, s.closeACP = newPanicACPRuntime(), func() {}
+	} else {
+		s.acp, s.closeACP = newObservedACPRuntime(s.acpStarted, s.acpStop)
+	}
+	opts := WorkerOptions{}
+	if s.useACP {
+		opts.Routes, opts.ACP = acpQueueRoutes(), s.acp
+	}
+	s.worker = NewWorker(s.store, s.gateway, nil, s.breaker, s.sink, opts)
+}
+
+// readyBlockingSandbox seeds a task whose agent stays in its turn until the
+// reaper's deadline cancels it.
 func (s *daemonSafetyScenario) readyBlockingSandbox(_ context.Context, count int) error {
 	s.store.seed(count, models.TaskStateReady)
-	s.sb = &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
-	s.worker.SetSandbox(s.sb)
+	for i := range s.store.tasks {
+		s.store.tasks[i].Title = fakeagent.Script(fakeagent.Step{SleepMS: 60_000})
+	}
 	return nil
 }
 
 func (s *daemonSafetyScenario) readyFastSandbox(_ context.Context, count int) error {
 	s.store.seed(count, models.TaskStateReady)
-	s.sb = &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
-	s.worker.SetSandbox(s.sb)
+	for i := range s.store.tasks {
+		s.store.tasks[i].Title = fakeagent.Script(acpReport("done"))
+	}
 	return nil
 }
 
@@ -100,19 +133,19 @@ func (s *daemonSafetyScenario) dispatchOnce(context.Context) error {
 
 func (s *daemonSafetyScenario) sandboxStarted(context.Context) error {
 	select {
-	case <-s.sb.started:
+	case <-s.acpStarted:
 		return nil
 	case <-time.After(2 * time.Second):
-		return fmt.Errorf("sandbox did not start")
+		return fmt.Errorf("the agent did not start")
 	}
 }
 
 func (s *daemonSafetyScenario) sandboxCancelled(context.Context) error {
 	select {
-	case <-s.sb.cancelled:
+	case <-s.acpStop:
 		return nil
 	case <-time.After(3 * time.Second):
-		return fmt.Errorf("sandbox was not cancelled by the reaper")
+		return fmt.Errorf("the agent process was not cancelled by the reaper")
 	}
 }
 
@@ -223,7 +256,8 @@ func (s *daemonSafetyScenario) daemonWithSlots(_ context.Context, slots int) err
 	s.breaker = NewCircuitBreaker()
 	s.gateway = &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
 	s.sink = &queueSink{}
-	s.worker = NewWorker(s.store, s.gateway, &queueSandbox{result: sandbox.Result{Success: true}}, s.breaker, s.sink, WorkerOptions{})
+	s.useACP = true
+	s.rebuildWorker()
 	s.daemon = NewDaemon(s.store, s.worker, nil, s.breaker, s.sink, DaemonOptions{
 		MaxWorkers: slots, TaskInterval: time.Hour, TaskDeadline: time.Minute,
 		Probe: StaticPIDProbe{},
@@ -232,7 +266,13 @@ func (s *daemonSafetyScenario) daemonWithSlots(_ context.Context, slots int) err
 }
 
 func (s *daemonSafetyScenario) workerPanics(context.Context) error {
-	s.worker.SetSandbox(&panicSandbox{})
+	s.panicAgent = true
+	s.rebuildWorker()
+	// The daemon holds the worker it was built with, so it is rebuilt too.
+	s.daemon = NewDaemon(s.store, s.worker, nil, s.breaker, s.sink, DaemonOptions{
+		MaxWorkers: s.daemon.sem.Capacity(), TaskInterval: time.Hour, TaskDeadline: time.Minute,
+		Probe: StaticPIDProbe{},
+	})
 	return nil
 }
 
@@ -256,16 +296,4 @@ func (s *daemonSafetyScenario) noPanicPropagated(context.Context) error {
 		return fmt.Errorf("expected PANIC event from recovered worker panic")
 	}
 	return nil
-}
-
-type panicSandbox struct {
-	mu      sync.Mutex
-	started bool
-}
-
-func (p *panicSandbox) Execute(context.Context, sandbox.Payload) (sandbox.Result, error) {
-	p.mu.Lock()
-	p.started = true
-	p.mu.Unlock()
-	panic("intentional test panic from sandbox")
 }

@@ -1,14 +1,10 @@
 package queue
 
 import (
-	"context"
 	"testing"
 	"time"
 
-	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
 )
 
 // SP-012: how long until work resumes after a provider outage ends?
@@ -30,58 +26,12 @@ import (
 //     reproduction is in spikes/SP-012-provider-outage-recovery.md and the fix
 //     is sized as T-035, out of scope for this spike.
 
-// TestOutageRecoveryFailedTasksSplitBetweenRequeueAndHandoff pins the two
-// different fates an outage-failed task gets, because "are failed tasks retried
-// automatically" has no single answer.
-func TestOutageRecoveryFailedTasksSplitBetweenRequeueAndHandoff(t *testing.T) {
-	store := newQueueStore()
-	gateway := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}, err: models.ErrLLMUnreachable}
-	sb := &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
-	breaker := NewCircuitBreaker()
-	now := time.Now().UTC()
-	breaker.SetClockForTest(func() time.Time { return now })
-	sink := &queueSink{}
-	worker := NewWorker(store, gateway, sb, breaker, sink, WorkerOptions{MaxRetries: DefaultWorkerMaxRetries})
-	daemon := NewDaemon(store, worker, nil, breaker, sink, DaemonOptions{MaxWorkers: 3, TaskInterval: time.Hour})
-
-	store.seed(3, models.TaskStateReady)
-
-	ctx := context.Background()
-	if _, _, err := daemon.dispatch(ctx); err != nil {
-		t.Fatalf("dispatch() error = %v", err)
-	}
-	if err := waitFor(func() bool { return daemon.sem.InUse() == 0 }, "outage workers finished"); err != nil {
-		t.Fatalf("workers did not finish: %v", err)
-	}
-	if breaker.State() != BreakerOpen {
-		t.Fatalf("breaker state = %s, want OPEN", breaker.State())
-	}
-
-	// The two that failed before the trip went back to READY with no retry
-	// counted: an outage is not the task's fault.
-	if got := store.count(models.TaskStateReady); got != 2 {
-		t.Fatalf("READY tasks = %d, want 2 (pre-trip failures requeued)", got)
-	}
-	// The one that tripped the breaker is blocked for a human.
-	if got := store.count(models.TaskStateBlocked); got != 1 {
-		t.Fatalf("BLOCKED tasks = %d, want 1 (trip task handed off)", got)
-	}
-	for _, task := range outageStoreTasks(store) {
-		if task.RetryCount != 0 {
-			t.Fatalf("task %s RetryCount = %d, want 0 — an outage must not consume the retry budget",
-				task.ID, task.RetryCount)
-		}
-	}
-	if !sink.containsType("PROVIDER_EXHAUSTED_HANDOFF") {
-		t.Fatal("no PROVIDER_EXHAUSTED_HANDOFF event, want the trip task handed to a human")
-	}
-}
-
-func outageStoreTasks(s *queueStore) []models.Task {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]models.Task(nil), s.tasks...)
-}
+// The two fates an outage-failed task used to get are no longer reachable from
+// exec.turn: an unreachable provider was an error the builtin loop got from
+// agentd's own gateway call, and after T-070 the task runs on an external agent
+// that agentd does not call. The breaker's own behaviour is pinned below and in
+// outage_trip_handoff_test.go; the recovery handoff is pinned in the feature
+// suite (features/outage_handoff.feature).
 
 // TestOutageRecoveryTimeToResume pins the outage pause and shows it is a
 // constant rather than a tunable, which is the operator-facing answer to "how
@@ -152,4 +102,10 @@ func TestOutageRecoveryFailedProbeReopensTheBreaker(t *testing.T) {
 	if got := breaker.ProbeLimit(1); got != 1 {
 		t.Fatalf("ProbeLimit at the restarted timeout = %d, want 1", got)
 	}
+}
+
+func outageStoreTasks(s *queueStore) []models.Task {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]models.Task(nil), s.tasks...)
 }

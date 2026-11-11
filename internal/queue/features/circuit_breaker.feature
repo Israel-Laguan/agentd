@@ -1,13 +1,12 @@
 Feature: The Circuit Breaker (LLM Outage Shield)
   Goal: Prevent the system from rapid-failing all tasks when an external API goes down.
 
-  Scenario: Tripping the circuit breaker on network failure
-    Given the Circuit Breaker is in the CLOSED state
-    And a mock AI Gateway is configured to return ErrLLMUnreachable
-    When 3 separate workers fail their tasks due to this error
-    Then the Circuit Breaker should transition to the OPEN state
-    And the first outage tasks should be READY and the trip task should be handed to HUMAN
-    And the Daemon should pause polling the database for new tasks
+  # The trip scenario this file used to open with drove three workers through a
+  # gateway that returned ErrLLMUnreachable. After T-070 a task that reaches
+  # exec.turn runs on an external agent and agentd makes no provider request of
+  # its own for it, so an unreachable provider can no longer be produced from the
+  # exec path; the global breaker is fed by the L1 calls agentd still makes and
+  # is pinned by outage_trip_handoff_test.go.
 
   Scenario: Half-Open recovery testing
     Given the Circuit Breaker is in the OPEN state

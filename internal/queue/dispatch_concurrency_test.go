@@ -2,14 +2,59 @@ package queue
 
 import (
 	"context"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
-	"agentd/internal/gateway"
-	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
+	"agentd/internal/agent/acp/fakeagent"
+	"agentd/internal/models"
 )
+
+// runningCounter counts the tasks the store holds in RUNNING, which is the
+// concurrency a dispatch actually achieves: a task is RUNNING from the moment a
+// worker claims it until it records a result.
+type runningCounter struct {
+	*queueStore
+	mu      sync.Mutex
+	current int
+	peak    int
+}
+
+func (c *runningCounter) MarkTaskRunning(ctx context.Context, id string, at time.Time, pid int) (*models.Task, error) {
+	task, err := c.queueStore.MarkTaskRunning(ctx, id, at, pid)
+	if err != nil {
+		return task, err
+	}
+	c.mu.Lock()
+	c.current++
+	if c.current > c.peak {
+		c.peak = c.current
+	}
+	c.mu.Unlock()
+	return task, nil
+}
+
+func (c *runningCounter) leave() {
+	c.mu.Lock()
+	c.current--
+	c.mu.Unlock()
+}
+
+func (c *runningCounter) UpdateTaskResult(ctx context.Context, id string, at time.Time, result models.TaskResult) (*models.Task, error) {
+	defer c.leave()
+	return c.queueStore.UpdateTaskResult(ctx, id, at, result)
+}
+
+func (c *runningCounter) UpdateTaskState(ctx context.Context, id string, at time.Time, next models.TaskState) (*models.Task, error) {
+	defer c.leave()
+	return c.queueStore.UpdateTaskState(ctx, id, at, next)
+}
+
+func (c *runningCounter) peakRunning() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.peak
+}
 
 func TestDispatchConcurrencyCapIsRespected(t *testing.T) {
 	const (
@@ -17,22 +62,20 @@ func TestDispatchConcurrencyCapIsRespected(t *testing.T) {
 		maxSlots   = 4
 		taskSleep  = 50 * time.Millisecond
 	)
-	store := newQueueStore()
+	base := newQueueStore()
+	store := &runningCounter{queueStore: base}
 	store.seed(totalTasks, "READY")
-
-	var peak, current atomic.Int32
-	wrappedSb := &concurrencyTrackingSandbox{
-		inner:   &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0}, delay: taskSleep},
-		current: &current,
-		peak:    &peak,
+	for i := range store.tasks {
+		store.tasks[i].Title = fakeagent.Script(fakeagent.Step{Message: "working"}, fakeagent.Step{SleepMS: int(taskSleep.Milliseconds())}, acpReport("done"))
 	}
 
-	gw := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
-	breaker := NewCircuitBreaker()
+	acp, closeACP := newACPRuntime()
+	t.Cleanup(closeACP)
 	sink := &queueSink{}
-	worker := NewWorker(store, gw, wrappedSb, breaker, sink, WorkerOptions{})
+	worker := NewWorker(store, &fakeGateway{}, nil, NewCircuitBreaker(), sink,
+		WorkerOptions{Routes: acpQueueRoutes(), ACP: acp})
 
-	daemon := NewDaemon(store, worker, nil, breaker, sink, DaemonOptions{
+	daemon := NewDaemon(store, worker, nil, NewCircuitBreaker(), sink, DaemonOptions{
 		MaxWorkers: maxSlots, TaskInterval: time.Hour, TaskDeadline: time.Minute,
 		Probe: StaticPIDProbe{},
 	})
@@ -42,7 +85,7 @@ func TestDispatchConcurrencyCapIsRespected(t *testing.T) {
 	waitSemaphore(t, daemon.sem, maxSlots, 30*time.Second)
 	elapsed := time.Since(start)
 
-	if p := peak.Load(); p > int32(maxSlots) {
+	if p := store.peakRunning(); p > maxSlots {
 		t.Fatalf("peak concurrency = %d, must not exceed %d", p, maxSlots)
 	}
 	expectedMin := time.Duration(totalTasks/maxSlots) * taskSleep
@@ -51,7 +94,7 @@ func TestDispatchConcurrencyCapIsRespected(t *testing.T) {
 	}
 }
 
-func dispatchAll(t *testing.T, daemon *Daemon, store *queueStore) {
+func dispatchAll(t *testing.T, daemon *Daemon, store *runningCounter) {
 	t.Helper()
 	for store.count("READY")+store.count("QUEUED") > 0 {
 		dispatched, _, err := daemon.dispatch(context.Background())
@@ -75,22 +118,4 @@ func waitSemaphore(t *testing.T, sem *Semaphore, want int, timeout time.Duration
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-}
-
-type concurrencyTrackingSandbox struct {
-	inner   sandbox.Executor
-	current *atomic.Int32
-	peak    *atomic.Int32
-}
-
-func (s *concurrencyTrackingSandbox) Execute(ctx context.Context, payload sandbox.Payload) (sandbox.Result, error) {
-	c := s.current.Add(1)
-	for {
-		p := s.peak.Load()
-		if c <= p || s.peak.CompareAndSwap(p, c) {
-			break
-		}
-	}
-	defer s.current.Add(-1)
-	return s.inner.Execute(ctx, payload)
 }

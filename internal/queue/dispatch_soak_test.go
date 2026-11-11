@@ -59,26 +59,6 @@ func soakLoop(t *testing.T, store *countingStore, d *Daemon, budget time.Duratio
 	return store.claims()
 }
 
-// holdGeminiProbe trips the gemini provider breaker, moves past its open timeout
-// and takes the single probe slot, leaving it held for the whole test so every
-// dispatched sibling is refused with AdmissionProbeInFlight.
-func holdGeminiProbe(t *testing.T, pb *ProviderBreakers) *time.Time {
-	t.Helper()
-	clock := time.Now()
-	pb.Get("gemini").SetClockForTest(func() time.Time { return clock })
-	for range 3 {
-		pb.Get("gemini").RecordError(models.ErrLLMQuotaExceeded)
-	}
-	clock = clock.Add(6 * time.Minute)
-	if got := pb.Get("gemini").Admit(); got != AdmissionProbe {
-		t.Fatalf("setup: Admit() = %v, want the probe slot held", got)
-	}
-	if got := pb.Get("gemini").State(); got != BreakerHalfOpen {
-		t.Fatalf("setup: breaker state = %s, want HALF_OPEN with the probe in flight", got)
-	}
-	return &clock
-}
-
 // newSoakDaemon builds a daemon over the fake store with short intervals. The
 // global breaker stays CLOSED so dispatch is never gated; the held probe lives on
 // the *provider* registry, which is where the sibling wait happens.
@@ -95,76 +75,10 @@ func newSoakDaemon(t *testing.T, store *countingStore, pb *ProviderBreakers, tas
 	})
 }
 
-// TestDispatchLoopRequeueRateIsBoundedWhileProbeInFlight (Gap B) pins the rate
-// at which siblings cycle while a probe is held.
-//
-// Nothing enforced this: the behaviour was measured by hand (~1 cycle per
-// dispatch tick) and left unpinned, so a future change that requeued in a tight
-// loop — a requeue that did not go through the tick, or a tick that stopped
-// pacing — would pass every other test while hammering the database once per
-// task per iteration. With a probe held the loop's only brake is the tick
-// interval itself, so the claim rate is the whole contract.
-func TestDispatchLoopRequeueRateIsBoundedWhileProbeInFlight(t *testing.T) {
-	const (
-		siblings     = 5
-		taskInterval = 20 * time.Millisecond
-		maxInterval  = 80 * time.Millisecond
-		budget       = time.Second
-	)
-
-	store := &countingStore{queueStore: newQueueStore()}
-	store.profile.Provider = "gemini"
-	store.seed(siblings, models.TaskStateReady)
-
-	pb := NewProviderBreakers()
-	holdGeminiProbe(t, pb)
-
-	d := newSoakDaemon(t, store, pb, taskInterval, maxInterval)
-
-	claims := soakLoop(t, store, d, budget)
-	if len(claims) < 2 {
-		t.Fatalf("claims = %d, want at least 2 ticks in %s — the loop never dispatched", len(claims), budget)
-	}
-	elapsed := claims[len(claims)-1].Sub(claims[0])
-
-	// One claim per tick at most, so the tick count is capped by elapsed /
-	// TaskInterval. A hot loop (no pacing at all) would land near elapsed/1ns,
-	// which this bound misses by three orders of magnitude; the +2 slack absorbs
-	// the first tick and a tick that raced a still-pending async requeue.
-	bound := int(elapsed/taskInterval) + 2
-	if len(claims) > bound {
-		t.Fatalf("dispatch ticks = %d over %s, want <= %d — the loop is not pacing at TaskInterval (%s)",
-			len(claims), elapsed, bound, taskInterval)
-	}
-	// And it must actually have cycled, or the bound is vacuous.
-	if len(claims) < 5 {
-		t.Fatalf("dispatch ticks = %d over %s, want enough ticks to be meaningful", len(claims), elapsed)
-	}
-
-	gaps := consecutiveGaps(claims)
-	// Every gap must respect the base interval: the loop waits before each tick.
-	for i, g := range gaps {
-		if g < taskInterval/2 {
-			t.Fatalf("tick %d came %s after the previous one, well under TaskInterval %s — the loop is spinning",
-				i, g, taskInterval)
-		}
-	}
-	// A requeued sibling counts as dispatched, so nextDispatchDelay returns the
-	// base interval and the tick rate stays at TaskInterval rather than backing
-	// off to MaxTaskInterval. That is deliberate: a sibling waiting on a probe is
-	// re-polled at the base rate, so the worst-case delay before a recovered
-	// provider is noticed is one TaskInterval, not one MaxTaskInterval. The median
-	// is used rather than the max so one slow tick on a loaded machine cannot fail
-	// this, while a genuine backoff to the cap (4x the base interval) does.
-	if med := median(gaps); med > taskInterval*3/2 {
-		t.Fatalf("median tick gap = %s, want about TaskInterval (%s) — waiting siblings are being "+
-			"backed off toward MaxTaskInterval %s, which delays every sibling behind a slow probe. gaps: %v",
-			med, taskInterval, maxInterval, roundGaps(gaps))
-	}
-	t.Logf("probe-in-flight soak: %d ticks over %s, bound=%d, median gap=%s, max gap=%s, gaps=%v",
-		len(claims), elapsed.Round(time.Millisecond), bound,
-		median(gaps).Round(time.Millisecond), gaps[len(gaps)-1].Round(time.Millisecond), roundGaps(gaps))
-}
+// The requeue-rate test that used to open this file drove siblings that a held
+// provider probe kept re-queuing. The dispatch-side provider gate went with the
+// builtin exec path in T-070, so there is no probe for siblings to wait on; the
+// backoff half below still pins the tick rate the loop paces itself with.
 
 // TestDispatchLoopBacksOffWhenNothingIsDispatched covers the backoff half.
 //

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
 )
 
 // --- Queue scenario steps (retries, ghost recovery, graceful shutdown) ---
@@ -26,13 +26,16 @@ func (s *queueScenario) maxRetryLimit(_ context.Context, limit int) error {
 }
 
 func (s *queueScenario) workerSeesSandboxFailure(ctx context.Context) error {
-	s.gateway.err = nil
-	s.gateway.content = `{"command":"false"}`
-	s.sandbox.result = sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}
+	// The failing command is the agent's now: a turn that fails is the task's
+	// failure, and the retry ladder is what the coordinator still owns.
+	s.useACP = true
+	s.acpGateway = &fakeGateway{}
+	s.rebuild(1)
 	task, ok := s.store.first(models.TaskStateReady)
 	if !ok {
 		return fmt.Errorf("ready task not found")
 	}
+	task.Title = fakeagent.Script(fakeagent.Step{Error: "command failed"})
 	queued, err := s.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateQueued)
 	if err != nil {
 		return err
@@ -140,17 +143,23 @@ func (s *queueScenario) startDaemon() {
 
 func (s *queueScenario) workerRunningSandbox(context.Context) error {
 	s.store.seed(1, models.TaskStateReady)
-	s.sandbox = &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
+	for i := range s.store.tasks {
+		s.store.tasks[i].Title = fakeagent.Script(fakeagent.Step{SleepMS: 60_000})
+	}
+	s.useACP = true
+	s.acpGateway = &fakeGateway{}
+	s.acpStarted, s.acpStop = make(chan struct{}), make(chan struct{})
+	s.acp, s.closeACP = newObservedACPRuntime(s.acpStarted, s.acpStop)
 	s.rebuild(1)
 	s.startDaemon()
 	go func() { _, _, _ = s.daemon.dispatch(s.ctx) }()
 	select {
-	case <-s.sandbox.started:
+	case <-s.acpStarted:
 		return nil
 	case <-time.After(5 * time.Second):
-		return fmt.Errorf("sandbox did not start")
+		return fmt.Errorf("the agent did not start")
 	case <-s.ctx.Done():
-		return fmt.Errorf("daemon context canceled before sandbox started")
+		return fmt.Errorf("daemon context canceled before the agent started")
 	}
 }
 
@@ -170,10 +179,10 @@ func (s *queueScenario) rootContextCancelled(context.Context) error {
 
 func (s *queueScenario) sandboxCaughtCancel(context.Context) error {
 	select {
-	case <-s.sandbox.cancelled:
+	case <-s.acpStop:
 		return nil
-	case <-time.After(time.Second):
-		return fmt.Errorf("sandbox did not observe cancellation")
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("the agent process did not observe cancellation")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
@@ -76,54 +77,6 @@ func (s *queueScenario) breakerClosed(context.Context) error {
 	return nil
 }
 
-func (s *queueScenario) gatewayUnreachable(context.Context) error {
-	s.gateway.err = models.ErrLLMUnreachable
-	s.rebuild(3)
-	return nil
-}
-
-func (s *queueScenario) threeWorkersFailOutage(ctx context.Context) error {
-	s.store.seed(3, models.TaskStateReady)
-	_, _, err := s.daemon.dispatch(ctx)
-	if err != nil {
-		return err
-	}
-	return waitFor(func() bool { return s.daemon.sem.InUse() == 0 }, "outage workers finished")
-}
-
-func (s *queueScenario) breakerShouldBeOpen(context.Context) error {
-	return waitFor(func() bool { return s.breaker.State() == BreakerOpen }, "breaker OPEN")
-}
-
-func (s *queueScenario) outageTasksReadyThenHumanHandoff(context.Context) error {
-	return waitFor(func() bool { return s.outageHandoffSettled() }, "outage handoff settlement")
-}
-
-func (s *queueScenario) outageHandoffSettled() bool {
-	tasks, _ := s.store.ListTasksByProject(context.Background(), "project")
-	ready := 0
-	blocked := 0
-	for _, task := range tasks {
-		if task.RetryCount != 0 {
-			return false
-		}
-		switch task.State {
-		case models.TaskStateReady:
-			ready++
-		case models.TaskStateBlocked:
-			blocked++
-		default:
-			return false
-		}
-	}
-	return ready == 2 && blocked == 1 && s.sink.containsType("PROVIDER_EXHAUSTED_HANDOFF")
-}
-
-func (s *queueScenario) daemonPausesPolling(ctx context.Context) error {
-	s.store.seed(1, models.TaskStateReady)
-	return s.nextTickIgnores(ctx, 1)
-}
-
 func (s *queueScenario) breakerOpen(context.Context) error {
 	s.breaker.ForceStateForTest(BreakerOpen, s.now)
 	return nil
@@ -132,7 +85,11 @@ func (s *queueScenario) breakerOpen(context.Context) error {
 func (s *queueScenario) breakerTimeoutElapsed(context.Context) error {
 	s.now = s.now.Add(DefaultBreakerTimeout + time.Second)
 	s.store.seed(3, models.TaskStateReady)
-	s.sandbox = newBlockingQueueSandbox()
+	s.useACP = true
+	s.acpGateway = &fakeGateway{}
+	for i := range s.store.tasks {
+		s.store.tasks[i].Title = fakeagent.Script(fakeagent.Step{Message: "checking"}, fakeagent.Step{SleepMS: 300}, acpReport("probe ok"))
+	}
 	s.rebuild(3)
 	return nil
 }
@@ -153,9 +110,6 @@ func (s *queueScenario) testTaskSucceeds(_ context.Context) error {
 		return s.store.count(models.TaskStateRunning) == 1
 	}, "probe task running"); err != nil {
 		return err
-	}
-	if s.sandbox != nil {
-		s.sandbox.unblockProbe()
 	}
 	return waitFor(func() bool {
 		return s.store.count(models.TaskStateCompleted) >= 1 && s.daemon.sem.InUse() == 0
@@ -196,7 +150,6 @@ func newBlockingQueueSandbox() *queueSandbox {
 		blockOnCtx: true,
 		started:    make(chan struct{}),
 		cancelled:  make(chan struct{}),
-		unblock:    make(chan struct{}),
 	}
 }
 
