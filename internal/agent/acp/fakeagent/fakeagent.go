@@ -177,7 +177,7 @@ func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.
 	case step.Cancels:
 		return "", a.say(ctx, session, fmt.Sprintf("cancels: %d", a.cancels.Load()))
 	case step.Permission != nil:
-		return "", a.ask(ctx, session, *step.Permission)
+		return a.ask(ctx, session, *step.Permission)
 	case step.Tool != nil:
 		return "", a.callTool(ctx, session, *step.Tool)
 	case step.Did != "":
@@ -200,7 +200,7 @@ func (a *agent) say(ctx context.Context, session acp.SessionId, text string) err
 
 // ask offers cline's options, but with allow_always first, so a client that
 // takes the first option grants every later call too.
-func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) error {
+func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) (acp.StopReason, error) {
 	id := acp.ToolCallId(fmt.Sprintf("call-%d", a.calls.Add(1)))
 	if p.CallID != "" {
 		// Name the call in its start, then ask permission for it with the title
@@ -209,13 +209,14 @@ func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) er
 		id = acp.ToolCallId(p.CallID)
 		start := acp.StartToolCall(id, p.Title, acp.WithStartKind(p.Kind), acp.WithStartStatus(acp.ToolCallStatusPending))
 		if err := a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionId: session, Update: start}); err != nil {
-			return err
+			return "", err
 		}
 		// shortcut: the SDK handles a notification and the next request concurrently, so wait for the start to be recorded; a real agent can race the same way.
 		select {
 		case <-time.After(50 * time.Millisecond):
 		case <-ctx.Done():
-			return ctx.Err()
+			a.cancels.Add(1)
+			return acp.StopReasonCancelled, nil
 		}
 	}
 	// A permission request carries the kind only when the agent names it; the
@@ -235,13 +236,13 @@ func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) er
 		},
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	answer := "cancelled"
 	if resp.Outcome.Selected != nil {
 		answer = string(resp.Outcome.Selected.OptionId)
 	}
-	return a.say(ctx, session, "permission: "+answer)
+	return "", a.say(ctx, session, "permission: "+answer)
 }
 
 // did reports a tool call as agents do: started pending, then completed.
