@@ -14,12 +14,20 @@ import (
 
 func (s *queueScenario) maxWorkersLimit(_ context.Context, limit int) error {
 	s.sandbox = newBlockingQueueSandbox()
+	s.useACP = true
 	s.rebuild(limit)
 	return nil
 }
 
 func (s *queueScenario) readyTasks(_ context.Context, count int) error {
 	s.store.seed(count, models.TaskStateReady)
+	if s.useACP {
+		// A task holds its slot while its agent is in the turn, which is what
+		// the concurrency cap has to hold down.
+		for i := range s.store.tasks {
+			s.store.tasks[i].Title = fakeagent.Script(fakeagent.Step{SleepMS: 60_000})
+		}
+	}
 	return nil
 }
 

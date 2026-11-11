@@ -193,13 +193,25 @@ func newWorkerStore() *workerStore {
 	}
 }
 
+// snapshot returns a copy of the task, so a caller that keeps the pointer
+// cannot race the heartbeat goroutine's write to LastHeartbeat.
+func (s *workerStore) snapshot() *models.Task {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
+	task := s.task
+	return &task
+}
+
 func (s *workerStore) MarkTaskRunning(_ context.Context, _ string, _ time.Time, pid int) (*models.Task, error) {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
 	s.task.State = models.TaskStateRunning
 	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
 	s.task.OSProcessID = &pid
 	now := time.Now().UTC()
 	s.task.LastHeartbeat = &now
-	return &s.task, nil
+	task := s.task
+	return &task, nil
 }
 
 func (s *workerStore) UpdateTaskHeartbeat(context.Context, string) error {
@@ -216,18 +228,26 @@ func (s *workerStore) UpdateCriteriaMet(context.Context, string, []string) error
 }
 
 func (s *workerStore) IncrementRetryCount(context.Context, string, time.Time) (*models.Task, error) {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
 	s.task.RetryCount++
 	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
-	return &s.task, nil
+	task := s.task
+	return &task, nil
 }
 
 func (s *workerStore) UpdateTaskDescription(_ context.Context, _ string, _ time.Time, description string) (*models.Task, error) {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
 	s.task.Description = description
 	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
-	return &s.task, nil
+	task := s.task
+	return &task, nil
 }
 
 func (s *workerStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, state *models.TaskState, description *string) (*models.Task, error) {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
 	updated := false
 	if state != nil {
 		s.task.State = *state
@@ -240,23 +260,30 @@ func (s *workerStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, 
 	if updated {
 		s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
 	}
-	return &s.task, nil
+	task := s.task
+	return &task, nil
 }
 
 func (s *workerStore) UpdateTaskState(_ context.Context, _ string, _ time.Time, next models.TaskState) (*models.Task, error) {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
 	s.task.State = next
 	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
-	return &s.task, nil
+	task := s.task
+	return &task, nil
 }
 
 func (s *workerStore) UpdateTaskResult(_ context.Context, _ string, _ time.Time, result models.TaskResult) (*models.Task, error) {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
 	s.result = &result
 	if result.Success {
 		s.task.State = models.TaskStateCompleted
 	} else {
 		s.task.State = models.TaskStateFailed
 	}
-	return &s.task, nil
+	task := s.task
+	return &task, nil
 }
 
 func (s *workerStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
@@ -319,7 +346,7 @@ func (s *workerStore) ListAgentProfiles(context.Context) ([]models.AgentProfile,
 }
 func (s *workerStore) DeleteAgentProfile(context.Context, string) error { return nil }
 func (s *workerStore) AssignTaskAgent(context.Context, string, time.Time, string) (*models.Task, error) {
-	return &s.task, nil
+	return s.snapshot(), nil
 }
 func (s *workerStore) ListSettings(context.Context) ([]models.Setting, error) { return nil, nil }
 func (s *workerStore) GetSetting(context.Context, string) (string, bool, error) {
@@ -364,6 +391,8 @@ func (s *workerStore) AppendTasksToProject(_ context.Context, _ string, _ string
 	return []models.Task{{BaseEntity: models.BaseEntity{ID: "child"}}}, nil
 }
 func (s *workerStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, drafts []models.DraftTask) (*models.Task, []models.Task, error) {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
 	s.appends++
 	s.drafts = append(s.drafts, drafts...)
 	s.task.State = models.TaskStateBlocked
@@ -378,10 +407,13 @@ func (s *workerStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.
 			Assignee:    draft.Assignee,
 		})
 	}
-	return &s.task, children, nil
+	task := s.task
+	return &task, children, nil
 }
 
 func (s *workerStore) PersistTieredDAG(_ context.Context, _ string, _ time.Time, children []models.TieredDAGTask) ([]models.Task, error) {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
 	s.task.State = models.TaskStateBlocked
 	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
 	tasks := make([]models.Task, 0, len(children))
