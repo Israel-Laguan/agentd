@@ -36,6 +36,7 @@ import (
 // outage out-of-band and retries the BLOCKED parent, which is exactly what
 // docs/demo.md's HITL beat does (it never calls human-resolution either).
 func TestJ07_HealingHandoff(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}

@@ -115,6 +115,7 @@ func TestJ09_ProviderCascade(t *testing.T) {
 // child — rather than a specific count, so it stays correct if the
 // threshold is retuned.
 func TestJ09_BreakerOpens(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}

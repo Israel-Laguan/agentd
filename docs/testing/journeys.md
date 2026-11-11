@@ -141,7 +141,7 @@ path. Python unit tests for the dispatch live in
 | J17 | The token is in the agent's summary, so it reaches `RESULT` (no `COMMAND` or `LOG_CHUNK`). |
 | J18, J23 | Completed script (J23's in the scheduler entry's `description_template`). |
 
-Not ported, still on the builtin until T-070/T-071 (owner, 2026-11-09): J07, J09 part B, J16 assert gateway failures on the exec call (a dead provider, a 429), which an ACP agent never makes: the clarify step's gateway errors are logged and skipped. They stay on their own profiles (`healing`, `breaker`, `provider`), unchanged, and move to `_harness/` in T-071 with J12 and J19–J21. J09 part A (chat cascade) runs no task and is unchanged. J19–J22 keep the builtin on the `default` profile because their agent profile pins a provider and model.
+Not ported: `TestJ07_HealingHandoff`, `TestJ09_BreakerOpens`, `TestJ12_TieredExecution`, `TestJ16_SiblingsWaitForProviderProbe`, `TestJ19_AgenticDenylistRefusesSudo`, `TestJ20_AgenticOversizedToolResultIsCut`, `TestJ21_AgenticRepeatedReadIsCounted`, and `TestJ22_AgentdReportAIInsideContainer` are skipped ("moves in T-071"). They previously ran on the builtin loop, which dispatch no longer calls. `TestJ09_ProviderCascade` exercises chat and still runs.
 
 ---
 

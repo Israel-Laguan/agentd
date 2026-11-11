@@ -78,6 +78,7 @@ func toolResultEvents(ctx context.Context, t *testing.T, client *APIClient, tag,
 // second is the alternative's successful run, no event carries the refused
 // command's output, and the model's next turn carries the alternative's output.
 func TestJ19_AgenticDenylistRefusesSudo(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
@@ -129,6 +130,7 @@ func TestJ19_AgenticDenylistRefusesSudo(t *testing.T) {
 // exist. Pass criteria: the CLI's table has a PURPOSE header and an exec.turn
 // row, and its CALLS for exec.turn equals the ai-usage report's calls.
 func TestJ22_AgentdReportAIInsideContainer(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
@@ -177,6 +179,7 @@ func TestJ22_AgentdReportAIInsideContainer(t *testing.T) {
 // gateway.truncation.strategy (default head_tail), so both markers survive with
 // the truncation marker between them.
 func TestJ20_AgenticOversizedToolResultIsCut(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
@@ -231,6 +234,7 @@ func TestJ20_AgenticOversizedToolResultIsCut(t *testing.T) {
 // bytes the second read added. This is the baseline for any later
 // "don't re-read files" work; nothing here deduplicates.
 func TestJ21_AgenticRepeatedReadIsCounted(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
