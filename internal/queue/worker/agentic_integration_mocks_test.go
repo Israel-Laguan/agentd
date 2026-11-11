@@ -8,7 +8,6 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
 )
 
 // mockAgenticSandbox executes commands and returns predefined results
@@ -48,95 +47,9 @@ type mockAgenticStore struct {
 
 func (s *mockAgenticStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
 
-func newMockAgenticStore(taskID string) *mockAgenticStore {
-	store := &mockAgenticStore{
-		task: models.Task{
-			BaseEntity:  models.BaseEntity{ID: taskID},
-			ProjectID:   "project-1",
-			AgentID:     "agent-1",
-			Title:       "Run agentic loop",
-			Description: testutil.AgenticTestTaskDescription(),
-			State:       models.TaskStateQueued,
-		},
-		project: models.Project{
-			BaseEntity:    models.BaseEntity{ID: "project-1"},
-			WorkspacePath: "/tmp/test-workspace",
-		},
-		profile: models.AgentProfile{
-			ID:          "agent-1",
-			Provider:    "openai",
-			Model:       "gpt-4",
-			AgenticMode: true,
-		},
-	}
-	return store
-}
-
-type recordingCapabilityAdapter struct {
-	tools     []gateway.ToolDefinition
-	result    any
-	err       error
-	callCount int
-	lastName  string
-	lastArgs  map[string]any
-}
-
-func (r *recordingCapabilityAdapter) Name() string { return "recording" }
-
-func (r *recordingCapabilityAdapter) ListTools(context.Context) ([]gateway.ToolDefinition, error) {
-	return r.tools, nil
-}
-
-func (r *recordingCapabilityAdapter) CallTool(_ context.Context, name string, args map[string]any) (any, error) {
-	r.callCount++
-	r.lastName = name
-	r.lastArgs = args
-	if r.err != nil {
-		return nil, r.err
-	}
-	if r.result == nil {
-		return map[string]any{"ok": true}, nil
-	}
-	return r.result, nil
-}
-
-func (r *recordingCapabilityAdapter) Close() error { return nil }
-
-func requestContainsTool(req gateway.AIRequest, name string) bool {
-	for _, tool := range req.Tools {
-		if tool.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
 func requestContainsToolResult(req gateway.AIRequest, toolCallID, contentSubstring string) bool {
 	for _, message := range req.Messages {
 		if message.Role == "tool" && message.ToolCallID == toolCallID && strings.Contains(message.Content, contentSubstring) {
-			return true
-		}
-	}
-	return false
-}
-
-func requestContainsAssistantToolCall(req gateway.AIRequest, callID string) bool {
-	for _, message := range req.Messages {
-		if message.Role != "assistant" {
-			continue
-		}
-		for _, tc := range message.ToolCalls {
-			if tc.ID == callID {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func requestContainsUserMessage(req gateway.AIRequest, contentSubstring string) bool {
-	for _, message := range req.Messages {
-		if message.Role == "user" && strings.Contains(message.Content, contentSubstring) {
 			return true
 		}
 	}

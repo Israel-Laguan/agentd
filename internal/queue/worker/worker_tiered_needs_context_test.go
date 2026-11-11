@@ -107,7 +107,7 @@ func TestTieredDecision_NeedsContextSpawnsRegatherAndRewiresExecute(t *testing.T
 	sb := &mockAgenticSandbox{}
 	w := NewWorker(store, gw, sb, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 10})
 
-	w.Process(ctx, decisionTask)
+	runLegacyTieredTest(t, ctx, w, decisionTask)
 	assertTieredDecisionReachedNeedsContext(t, ctx, store, decisionTask)
 	_, newDecisionID := assertTieredRegatherPairSpawned(t, ctx, store, origin)
 	assertTieredPendingExecuteRewiredStillPending(t, ctx, store, executeTask, newDecisionID)

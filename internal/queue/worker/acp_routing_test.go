@@ -160,10 +160,10 @@ func TestResolveExecutionAgentPicksTheACPAgentAnExecTurnRouteNames(t *testing.T)
 	if got.kind != executionAgentACP || got.route.Agent != "coder" || got.agent.Preset != "fake" || got.route.Required != spec.LevelL3 {
 		t.Fatalf("resolution = %+v, want the acp agent coder at L3", got)
 	}
-	// With no acp agent configured, the task stays on the builtin loop.
+	// With no acp agent configured, the task has no execution route.
 	w.routes = route.Table{}
-	if got := w.resolveExecutionAgent(context.Background(), task, project, profile); got.kind != executionAgentAgentic {
-		t.Fatalf("resolution with no routes = %q, want %q", got.kind, executionAgentAgentic)
+	if got := w.resolveExecutionAgent(context.Background(), task, project, profile); got.kind != executionAgentMissingRoute {
+		t.Fatalf("resolution with no routes = %q, want %q", got.kind, executionAgentMissingRoute)
 	}
 }
 
@@ -194,8 +194,8 @@ func TestACPExecutionCompletesTheTaskWithTheReportedSummary(t *testing.T) {
 	if len(recs) != 1 || recs[0].Purpose != spec.PurposeExecTurn || recs[0].RoutedAgent != "coder" || recs[0].Provider != route.KindACP || recs[0].Outcome != spec.OutcomeOK {
 		t.Fatalf("records = %+v, want one ok exec.turn record for coder", recs)
 	}
-	if got := roLog.all(); len(got) != 1 || got[0] {
-		t.Fatalf("acp Command readOnly args = %v, want [false] for a writable exec.turn", got)
+	if got := roLog.all(); len(got) != 1 || !got[0] {
+		t.Fatalf("acp Command readOnly args = %v, want [true] for a text task", got)
 	}
 }
 
@@ -351,7 +351,7 @@ func TestACPExecutionAuditsFailWhenTheResultCannotBePersisted(t *testing.T) {
 func TestACPExecutionAuditsSuspendedWhenPermissionIsBlocked(t *testing.T) {
 	t.Parallel()
 	script := fakeagent.Script(fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindEdit, Title: "edit"}})
-	w, store, task, project, profile, _, _ := acpFixture(t, script, false)
+	w, store, task, project, profile, _, _ := acpFixture(t, script, true)
 	profile.GatedTools = []string{"write"}
 	path := withAuditFile(t, w)
 

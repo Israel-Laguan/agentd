@@ -39,6 +39,20 @@ func (e acpExecution) Validate() error {
 // committed, a question goes to a human, an unverified completion fails to a
 // human (B-082), and any other error takes the gateway error path (breaker,
 // defer or retry).
+// executionAccess is the workspace access an execution stage runs with: a task
+// that changes nothing runs read-only even on a writable agent (SP-029), and a
+// read-only agent that is handed a task that changes the workspace cannot do it.
+func (w *Worker) executionAccess(ctx context.Context, task models.Task, profile models.AgentProfile) (stage.WorkspaceAccess, bool) {
+	if profile.WorkspaceReadonly && task.RequiresWorkspaceChange {
+		w.failTerminal(ctx, task, stage.ErrUnverifiedCompletion, models.TaskStateFailedRequiresHuman)
+		return stage.AccessNone, false
+	}
+	if !task.RequiresWorkspaceChange {
+		return stage.AccessReadOnly, true
+	}
+	return stage.AccessWrite, true
+}
+
 func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, resolved executionResolution) {
 	audit := w.beginTaskAudit(task, project, route.KindACP)
 	succeeded := false
@@ -49,13 +63,9 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 		audit.failed = !succeeded && !audit.suspended
 		w.finishTaskAudit(task, project, route.KindACP, audit)
 	}()
-	access := stage.AccessWrite
-	if profile.WorkspaceReadonly {
-		if task.RequiresWorkspaceChange {
-			w.failTerminal(ctx, task, stage.ErrUnverifiedCompletion, models.TaskStateFailedRequiresHuman)
-			return
-		}
-		access = stage.AccessReadOnly
+	access, ok := w.executionAccess(ctx, task, profile)
+	if !ok {
+		return
 	}
 	ctx = gateway.WithTaskID(ctx, task.ID)
 	taskHooks, _ := w.MountAgenticHooks(project, profile)

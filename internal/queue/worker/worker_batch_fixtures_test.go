@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -282,21 +281,6 @@ func (g *batchTrackingGateway) batchJSON(req gateway.AIRequest) string {
 	}
 	b, _ := json.Marshal(batchTextResponse{Results: results})
 	return string(b)
-}
-
-type batchFailingGateway struct{}
-
-func (g *batchFailingGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
-	for _, m := range req.Messages {
-		if m.Role == "user" && countBatchSlots(m.Content) > 1 {
-			return gateway.AIResponse{}, errors.New("batch gateway unavailable")
-		}
-	}
-	return gateway.AIResponse{Content: "single fallback summary"}, nil
-}
-
-func (g *batchFailingGateway) Embed(context.Context, spec.EmbedRequest) (spec.EmbedResponse, error) {
-	return spec.EmbedResponse{}, nil
 }
 
 func (g *batchTrackingGateway) Embed(context.Context, spec.EmbedRequest) (spec.EmbedResponse, error) {

@@ -33,10 +33,10 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 	if err != nil {
 		var missing *hostreport.MissingFactsError
 		if errors.As(err, &missing) {
-			slog.Warn("host report incomplete; falling back to the model path", "task_id", task.ID, "error", err)
+			slog.Warn("host report incomplete; execution requires an ACP route", "task_id", task.ID, "error", err)
 			return false
 		}
-		slog.Warn("host report render failed; falling back to the model path", "task_id", task.ID, "error", err)
+		slog.Warn("host report render failed; execution requires an ACP route", "task_id", task.ID, "error", err)
 		return false
 	}
 	if !ok {
@@ -52,17 +52,4 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 	}
 	w.commit(ctx, task, sandbox.Result{Success: true, Stdout: report}, nil)
 	return true
-}
-
-// renderBatchHostReports completes the host report tasks of a batch the same
-// way the single-task paths do, before the batch model call, and returns the
-// tasks still needing a model call (B-050).
-func (w *Worker) renderBatchHostReports(ctx context.Context, tasks []models.Task, project models.Project) []models.Task {
-	remaining := tasks[:0:0]
-	for _, task := range tasks {
-		if !w.tryRenderHostReport(ctx, task, project) {
-			remaining = append(remaining, task)
-		}
-	}
-	return remaining
 }

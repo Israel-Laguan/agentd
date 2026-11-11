@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"agentd/internal/gateway"
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
 	"agentd/internal/testutil"
 )
@@ -48,14 +48,15 @@ func TestProcess_AgenticRequireReview_CreatesReviewHandoff(t *testing.T) {
 	ctx := context.Background()
 	setupAgenticReviewProfile(t, store, ctx)
 
-	gw := &sequenceGateway{
-		responses: []gateway.AIResponse{
-			{Content: "agentic draft output for human review"},
-		},
-	}
 	sb := &mockAgenticSandbox{}
-	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
+	rt, _, log := acpRuntime(t)
+	w := NewWorker(store, nil, sb, nil, nil, WorkerOptions{Routes: acpRoutes(), ACP: rt})
 	task := materializeLegacyReviewTask(t, store, ctx, "agentic-review", "task-agentic-review")
+	updated, err := store.UpdateTaskDescription(ctx, task.ID, task.UpdatedAt, task.Description+"\n"+fakeagent.Script(report(map[string]any{"summary": "agentic draft output for human review"})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task = *updated
 	queued, err := store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateQueued)
 	if err != nil {
 		t.Fatalf("queue task: %v", err)
@@ -73,8 +74,8 @@ func TestProcess_AgenticRequireReview_CreatesReviewHandoff(t *testing.T) {
 	if sb.executionCount != 0 {
 		t.Fatalf("sandbox executions = %d, want 0 (final text only)", sb.executionCount)
 	}
-	if gw.callCount != 1 {
-		t.Fatalf("gateway calls = %d, want 1", gw.callCount)
+	if starts, _ := log.runs(); len(starts) != 1 {
+		t.Fatalf("ACP sessions = %d, want 1", len(starts))
 	}
 	draft, ok := findLatestDraftReviewFromStore(t, store, ctx, task.ID)
 	if !ok || !strings.Contains(draft, "agentic draft output") {

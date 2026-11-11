@@ -2,154 +2,27 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"os"
-	"strings"
 
-	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/queue/planning"
 )
 
-// ProcessBatch runs a batched LLM call for same-context tasks, with per-slot fallback.
+// ProcessBatch dispatches each task through its own execution route.
+//
+// It used to run one batched LLM call for the tasks of a batch, with a per-slot
+// fallback. That went with the builtin exec path in T-070: a task that reaches
+// exec.turn now runs on its own external agent, and one agent session cannot
+// serve two tasks. The batch text gateway stays for its unit tests, which pin
+// the request and response shape the L1 path uses.
 func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
-	if len(tasks) == 0 {
-		return
-	}
-	taskIDs := make([]string, len(tasks))
-	for i, task := range tasks {
-		taskIDs[i] = task.ID
-	}
-	slog.DebugContext(ctx, "worker: processing batch", "batch_size", len(tasks), "task_ids", taskIDs)
-	if len(tasks) == 1 {
-		w.Process(ctx, tasks[0])
-		return
-	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("worker batch panic recovered", "task_ids", taskIDs, "panic", r)
-			for _, task := range tasks {
-				w.Emit(ctx, task, "PANIC", fmt.Sprintf("worker batch panic: %v", r))
-				w.FailHard(ctx, task, fmt.Errorf("worker batch panic: %v", r))
-			}
+	if len(tasks) > 1 {
+		ids := make([]string, len(tasks))
+		for i, task := range tasks {
+			ids[i] = task.ID
 		}
-	}()
-
-	project, profile, err := w.loadContext(ctx, tasks[0])
-	if err != nil || project == nil || profile == nil {
-		if err == nil {
-			err = fmt.Errorf("batch context missing for project=%q agent=%q", tasks[0].ProjectID, tasks[0].AgentID)
-		}
-		for _, task := range tasks {
-			w.FailHard(ctx, task, err)
-		}
-		return
+		slog.DebugContext(ctx, "worker: processing batch", "batch_size", len(tasks), "task_ids", ids)
 	}
-
-	ctx = gateway.WithHouseRules(ctx, models.LoadHouseRules(ctx, w.store))
-
-	runnable, stopHeartbeats := w.prepareBatchRunnable(ctx, tasks, *profile)
-	defer stopHeartbeats()
-	remaining := runnable[:0:0]
-	for _, task := range runnable {
-		if w.goldenRepairPending(ctx, task) {
-			w.dispatchProcess(ctx, task, *project, *profile)
-		} else {
-			remaining = append(remaining, task)
-		}
-	}
-	runnable = remaining
-	runnable = w.renderBatchHostReports(ctx, runnable, *project)
-
-	if len(runnable) < 2 {
-		for _, task := range runnable {
-			w.dispatchProcess(ctx, task, *project, *profile)
-		}
-		return
-	}
-
-	w.processBatchAgentic(ctx, runnable, *project, *profile)
-}
-
-func (w *Worker) prepareBatchRunnable(
-	ctx context.Context,
-	tasks []models.Task,
-	profile models.AgentProfile,
-) (runnable []models.Task, stopHeartbeats func()) {
-	heartbeats := make([]func(), 0, len(tasks))
 	for _, task := range tasks {
-		if planning.IsPhasePlanningTask(task.Title) {
-			w.Process(ctx, task)
-			continue
-		}
-		running, runErr := w.store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, os.Getpid())
-		if runErr != nil {
-			slog.Warn("batch mark task running failed", "task_id", task.ID, "error", runErr)
-			w.requeue(ctx, task, fmt.Sprintf("mark running: %v", runErr))
-			continue
-		}
-		task = *running
-		if profile.RequireReview {
-			if done, finErr := w.tryFinalizeApprovedReview(ctx, task); finErr != nil {
-				w.FailHard(ctx, task, finErr)
-				continue
-			} else if done {
-				continue
-			}
-		}
-		if w.goldenRepairPending(ctx, task) {
-			heartbeats = append(heartbeats, w.startHeartbeat(ctx, task.ID))
-			runnable = append(runnable, task)
-			continue
-		}
-		if handled, rollupErr := w.tryRollUpBreakdown(ctx, task); rollupErr != nil {
-			w.Emit(ctx, task, "BREAKDOWN_ROLLUP_ERROR", rollupErr.Error())
-			w.requeue(ctx, task, rollupErr.Error())
-			continue
-		} else if handled {
-			continue
-		}
-		heartbeats = append(heartbeats, w.startHeartbeat(ctx, task.ID))
-		runnable = append(runnable, task)
-	}
-	return runnable, func() {
-		for _, stop := range heartbeats {
-			stop()
-		}
-	}
-}
-
-func (w *Worker) processBatchAgentic(
-	ctx context.Context,
-	tasks []models.Task,
-	project models.Project,
-	profile models.AgentProfile,
-) {
-	release, ok := w.gateBatchProvider(ctx, tasks, profile.Provider)
-	if !ok {
-		return
-	}
-	defer release()
-	resp, err := w.runBatchTextGateway(ctx, tasks, project, profile)
-	if err != nil {
-		for _, task := range tasks {
-			w.HandleGatewayError(ctx, task, err)
-		}
-		return
-	}
-	bySlot := make(map[int]batchTextSlot, len(resp.Results))
-	for _, r := range resp.Results {
-		bySlot[r.Slot] = r
-	}
-	for i, task := range tasks {
-		slot, ok := bySlot[i]
-		if !ok || strings.TrimSpace(slot.Content) == "" {
-			w.dispatchProcess(ctx, task, project, profile)
-			continue
-		}
-		p := profile
-		w.CommitTextWithProfile(ctx, task, slot.Content, &p)
+		w.Process(ctx, task)
 	}
 }

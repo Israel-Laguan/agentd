@@ -36,7 +36,7 @@ func resolverCases(store *testutil.FakeKanbanStore) []resolverCase {
 			name:    "review",
 			worker:  &Worker{store: store},
 			profile: models.AgentProfile{RequireReview: true},
-			want:    executionAgentReview,
+			want:    executionAgentMissingRoute,
 		},
 		{
 			name: "rollup",
@@ -56,13 +56,13 @@ func resolverCases(store *testutil.FakeKanbanStore) []resolverCase {
 			name:   "tiered origin",
 			worker: &Worker{store: store, tieredCfg: config.TieredConfig{Enabled: true, ComplexityThreshold: 1}},
 			task:   models.Task{Title: "implement a complex integration with many services and detailed validation requirements", Description: "configure the api database cache queue and deployment pipeline including tests and documentation"},
-			want:   executionAgentTieredOrigin,
+			want:   executionAgentMissingRoute,
 		},
 		{
 			name:   "tiered step",
 			worker: &Worker{store: store},
 			task:   models.Task{AgentID: "tier-execute"},
-			want:   executionAgentTieredStep,
+			want:   executionAgentMissingRoute,
 		},
 		{
 			name:   "host report",
@@ -74,7 +74,7 @@ func resolverCases(store *testutil.FakeKanbanStore) []resolverCase {
 			name:   "agentic",
 			worker: &Worker{store: store},
 			task:   models.Task{Title: "simple task"},
-			want:   executionAgentAgentic,
+			want:   executionAgentMissingRoute,
 		},
 	}
 }
