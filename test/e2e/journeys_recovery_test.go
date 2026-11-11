@@ -159,11 +159,14 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 	}
 	client := NewAPIClient(baseURL, harness.client)
 
+	// The agent's Touch step writes the workspace, so the task must run writable.
+	slow := fakeTask("J08 slow task", j08RerunMarker, fakeagent.Step{Touch: j08ReadyMarker}, fakeagent.Step{SleepMS: int(j08Slow / time.Millisecond)})
+	slow.RequiresWorkspaceChange = true
 	plan := DraftPlan{
 		ProjectName:         UniqueProjectName("j08"),
 		Description:         "J08 unclean-kill recovery task",
 		StartEmptyWorkspace: true,
-		Tasks:               []DraftTask{fakeTask("J08 slow task", j08RerunMarker, fakeagent.Step{Touch: j08ReadyMarker}, fakeagent.Step{SleepMS: int(j08Slow / time.Millisecond)})},
+		Tasks:               []DraftTask{slow},
 	}
 	materialized := materializePlan(ctx, t, client, "J08", plan)
 	projectID, taskID := materialized.Project.ID, materialized.Tasks[0].ID

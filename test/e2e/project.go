@@ -86,6 +86,9 @@ type DraftTask struct {
 	Description     string   `json:"description,omitempty"`
 	SuccessCriteria []string `json:"success_criteria,omitempty"`
 	DependsOn       []string `json:"depends_on,omitempty"`
+	// RequiresWorkspaceChange runs the task writable; without it an ACP agent's
+	// workspace is mounted read-only.
+	RequiresWorkspaceChange bool `json:"requires_workspace_change,omitempty"`
 	// AgentID pre-assigns the task to an agent profile at creation.
 	AgentID string `json:"agent_id,omitempty"`
 }
