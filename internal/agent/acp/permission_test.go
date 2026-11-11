@@ -123,6 +123,36 @@ func TestOwnMCPToolsAreAllowedAndOthersRefused(t *testing.T) {
 	}
 }
 
+// cline 3.0.74 appends the arguments to the title and renames dotted tools
+// with a hash (live, SP-029). Those names pass; lookalikes do not.
+func TestOwnToolNamesAsCline3Sends(t *testing.T) {
+	t.Parallel()
+	own := []acpsdk.McpServer{{Http: &acpsdk.McpServerHttpInline{Name: "agentd", Type: "http", Url: "http://x", Headers: []acpsdk.HttpHeader{}}}}
+	for title, want := range map[string]bool{
+		`agentd__report_outcome: {"outcome":"completed"}`: true,
+		"agentd__get_context: {}":                         true,
+		"agentd__board_list_projects_eac0b1bb":            true,
+		"agentd__board_list_tasks_18b7ab84: {}":           true,
+		"agentd__report_outcome_eac0b1bb":                 false, // only dotted tools get a hash
+		"agentd__report_outcomex: {}":                     false,
+		"agentd__report_outcome:{}":                       false,
+		"agentd__board_list_tasks_18b7ab84x":              false,
+		"agentd__board_list_tasks_18B7AB84":               false,
+		"agentd__board_list_tasks_18b7ab8":                false,
+		"agentd__board_list_tasks":                        false,
+		"agentd__board_delete_task_18b7ab84":              false,
+		"evil__board_list_tasks_18b7ab84":                 false,
+		"agentd__board.list_tasks_18b7ab84":               false,
+	} {
+		if got := ownTool(Permission{Kind: string(acpsdk.ToolKindOther), Title: title}, own); got != want {
+			t.Errorf("ownTool(%q) = %t; want %t", title, got, want)
+		}
+	}
+	if ownTool(Permission{Kind: string(acpsdk.ToolKindOther), Title: "agentd__report_outcome: {}"}, nil) {
+		t.Error("own tool allowed with no agentd server attached")
+	}
+}
+
 func TestPermissionDeniedByTheHooksRejects(t *testing.T) {
 	t.Parallel()
 	hooks := &recorder{verdict: Verdict{Reason: "tool \"write\" is not in this profile's allowed_tools"}}
