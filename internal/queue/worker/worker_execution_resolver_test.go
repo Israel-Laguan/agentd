@@ -39,12 +39,9 @@ func resolverCases(store *testutil.FakeKanbanStore) []resolverCase {
 			want:    executionAgentMissingRoute,
 		},
 		{
-			name: "rollup",
-			worker: &Worker{store: &resolverRollupStore{
-				FakeKanbanStore: store,
-				comments:        []models.Comment{breakdownMarker(1)},
-			}},
-			want: executionAgentRollup,
+			name:   "rollup",
+			worker: &Worker{store: &resolverRollupStore{FakeKanbanStore: store, comments: []models.Comment{breakdownMarker(1)}}},
+			want:   executionAgentRollup,
 		},
 		{
 			// A review-required task must not take the roll-up shortcut: the
