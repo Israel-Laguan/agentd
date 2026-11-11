@@ -21,12 +21,12 @@ const draftPlanSchemaHint = `The JSON object must have exactly this shape:
       "depends_on": [string] (optional, ref_id values of earlier tasks),
       "success_criteria": [string] (optional),
       "golden_criteria": [{"criterion": string, "check_command": string}] (optional; criterion must exactly match a success_criteria entry; the controller runs the command in the workspace),
-      "requires_workspace_change": boolean (optional, true when the task must create or change files or run commands in the workspace)
+      "requires_workspace_change": boolean (optional; true when the task must create or change files or run commands in the workspace, false for a text-only task, omit it when unsure so the task keeps write access)
     }
   ]
 }
 Example:
-{"project_name":"hello-cli","tasks":[{"ref_id":"t1","title":"Write main.go","description":"Create a Go program that prints hello.","assignee":"SYSTEM","success_criteria":["go run . prints hello"]},{"ref_id":"t2","title":"Add README","description":"Document how to run it.","assignee":"SYSTEM","depends_on":["t1"]}]}`
+{"project_name":"hello-cli","tasks":[{"ref_id":"t1","title":"Write main.go","description":"Create a Go program that prints hello.","assignee":"SYSTEM","requires_workspace_change":true,"success_criteria":["go run . prints hello"]},{"ref_id":"t2","title":"Add README","description":"Document how to run it.","assignee":"SYSTEM","depends_on":["t1"],"requires_workspace_change":true}]}`
 
 // SchemaHint returns the DraftPlan JSON schema plus an example, used by the
 // gateway to build prompts and corrective retry messages.

@@ -86,6 +86,45 @@ func TestHostReportRendersWithoutModelOrShell(t *testing.T) {
 	}
 }
 
+// A review-required profile still approves the rendered report before the task
+// completes: the renderer writes it, then createReviewHandoff blocks the task.
+func TestHostReportRequiresReviewBeforeCompletion(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	files := map[string]string{
+		"os_info.txt":   hostReportFixture,
+		"cpu_info.txt":  "Architecture:                            x86_64\nModel name:                              Intel(R) Core(TM) Ultra 5 226V\nCPU(s):                                  8\n",
+		"mem_info.txt":  "               total        used        free\nMem:            15Gi       7.9Gi       1.2Gi\n",
+		"disk_info.txt": "NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS\nnvme0n1     259:0    0 476.9G  0 disk\n",
+	}
+	task, project := seedHostReportTask(t, store, "Create system report.md summarizing the OS and hardware from the collected files", files)
+	setupReviewProfile(t, store, ctx, "")
+	profile, err := store.GetAgentProfile(ctx, "default")
+	if err != nil {
+		t.Fatalf("get profile: %v", err)
+	}
+	w := NewWorker(store, &routingTestGateway{}, panicSandbox{t}, nil, &mockEventSink{}, WorkerOptions{})
+	w.dispatchProcess(ctx, task, project, *profile)
+
+	got, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.State != models.TaskStateBlocked {
+		t.Fatalf("task state = %s, want BLOCKED pending review", got.State)
+	}
+	children, err := store.ListChildTasks(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	for _, child := range children {
+		if strings.HasPrefix(child.Title, models.HITLSubtaskTitleReview) {
+			return
+		}
+	}
+	t.Fatalf("children = %+v, want a review subtask", children)
+}
+
 // B-046: a report missing a core fact must not burn retries re-rendering the
 // same workspace (the collectors already ran, so the next attempt would hit
 // the same gap). With no execution route, the task fails to a human.

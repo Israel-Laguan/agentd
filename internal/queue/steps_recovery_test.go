@@ -37,8 +37,13 @@ func (s *queueScenario) workerSeesSandboxFailure(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("ready task not found")
 	}
-	task.Title = fakeagent.Script(fakeagent.Step{Error: "command failed"})
-	queued, err := s.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateQueued)
+	updated, err := s.store.update(task.ID, func(task *models.Task) {
+		task.Title = fakeagent.Script(fakeagent.Step{Error: "command failed"})
+	})
+	if err != nil {
+		return err
+	}
+	queued, err := s.store.UpdateTaskState(ctx, updated.ID, updated.UpdatedAt, models.TaskStateQueued)
 	if err != nil {
 		return err
 	}
@@ -149,6 +154,8 @@ func (s *queueScenario) workerRunningSandbox(context.Context) error {
 	// turn starts. Waiting on it (rather than the Command hook, which fires
 	// before cmd.Start) ensures the interrupt cancels an in-flight turn.
 	marker := fmt.Sprintf("agentd-ready-%d.marker", time.Now().UnixNano())
+	markerPath := filepath.Join(s.store.project.WorkspacePath, marker)
+	defer func() { _ = os.Remove(markerPath) }()
 	for i := range s.store.tasks {
 		s.store.tasks[i].Title = fakeagent.Script(
 			fakeagent.Step{Touch: marker},
@@ -163,7 +170,7 @@ func (s *queueScenario) workerRunningSandbox(context.Context) error {
 	s.startDaemon()
 	go func() { _, _, _ = s.daemon.dispatch(s.ctx) }()
 	return waitFor(func() bool {
-		_, err := os.Stat(filepath.Join(s.store.project.WorkspacePath, marker))
+		_, err := os.Stat(markerPath)
 		return err == nil
 	}, "the agent to start its turn")
 }

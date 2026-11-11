@@ -48,7 +48,14 @@ func TestDispatchReleasesProbeSlotWhenQueueIsEmptyAtTimeout(t *testing.T) {
 	if err := waitFor(func() bool { return daemon.sem.InUse() == 0 }, "probe task finished"); err != nil {
 		t.Fatalf("probe task did not finish: %v", err)
 	}
+	// The probe is an ACP task, so its completion is not a provider request and
+	// must not close the breaker. The slot is still released: the next tick can
+	// admit another probe instead of latching HALF_OPEN.
+	if breaker.State() == BreakerClosed {
+		t.Fatalf("breaker state after an ACP probe = %s, want it to stay HALF_OPEN", breaker.State())
+	}
+	breaker.RecordSuccess()
 	if breaker.State() != BreakerClosed {
-		t.Fatalf("breaker state after the probe succeeded = %s, want CLOSED", breaker.State())
+		t.Fatalf("breaker state after a provider success = %s, want CLOSED", breaker.State())
 	}
 }

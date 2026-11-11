@@ -210,6 +210,27 @@ func TestClinePresetPrefersTheClinePassLogin(t *testing.T) {
 	}
 }
 
+func TestClinePresetAcceptsAClinePassOnlyLogin(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	creds := filepath.Join(t.TempDir(), "providers.json")
+	writeFile(t, creds, `{"version": 1, "lastUsedProvider": "openrouter", "modes": {}, "providers": {
+		"cline-pass": {"settings": {"provider": "cline-pass", "auth": {"accessToken": "PASS-TOKEN"}}},
+		"openrouter": {"settings": {"provider": "openrouter", "auth": {"apiKey": "OR-KEY"}}}}}`)
+	argv, err := Presets["cline"].Home(Launch{Home: home, Model: "cline-free/solar-mini4", Credentials: creds, MCPURL: "http://127.0.0.1:3129/mcp/abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envOf(argv)["CLINE_PROVIDER"] != "cline-pass" {
+		t.Fatalf("argv = %q; want CLINE_PROVIDER=cline-pass", argv)
+	}
+	providers := readJSON(t, filepath.Join(home, ".cline/data/settings/providers.json"))
+	byName, _ := providers["providers"].(map[string]any)
+	if len(byName) != 1 || byName["cline-pass"] == nil || providers["lastUsedProvider"] != "cline-pass" {
+		t.Fatalf("providers.json keeps %v, last used %v; want only cline-pass, last cline-pass", keys(byName), providers["lastUsedProvider"])
+	}
+}
+
 func TestClinePresetNeedsTheSessionsMCPURL(t *testing.T) {
 	t.Parallel()
 	creds := filepath.Join(t.TempDir(), "providers.json")

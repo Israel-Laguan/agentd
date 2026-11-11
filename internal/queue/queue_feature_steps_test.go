@@ -21,6 +21,7 @@ func registerQueueSteps(sc *godog.ScenarioContext, state *queueScenario) {
 	sc.Step(`^the Daemon should pick exactly 1 READY task to test the connection$`, state.oneProbeTask)
 	sc.Step(`^that test task succeeds$`, state.testTaskSucceeds)
 	sc.Step(`^the Circuit Breaker should transition to CLOSED$`, state.breakerShouldBeClosed)
+	sc.Step(`^the Circuit Breaker should not close$`, state.breakerShouldNotClose)
 	sc.Step(`^normal polling should resume$`, state.normalPollingResumes)
 	sc.Step(`^a task is in the READY state with a RetryCount of (\d+)$`, state.readyTaskWithRetries)
 	sc.Step(`^the Maximum Retry Limit is set to (\d+)$`, state.maxRetryLimit)

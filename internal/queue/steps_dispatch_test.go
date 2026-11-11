@@ -145,6 +145,15 @@ func (s *queueScenario) breakerShouldBeClosed(context.Context) error {
 	return requireBreakerState(s.breaker, BreakerClosed)
 }
 
+// An ACP task completes without a provider request, so it must not be read as
+// recovery: the breaker stays HALF_OPEN and keeps admitting one probe at a time.
+func (s *queueScenario) breakerShouldNotClose(context.Context) error {
+	if state := s.breaker.State(); state == BreakerClosed {
+		return fmt.Errorf("breaker state = %s, want it to stay HALF_OPEN without a provider request", state)
+	}
+	return nil
+}
+
 func (s *queueScenario) normalPollingResumes(ctx context.Context) error {
 	// The tick is part of the poll on purpose: dispatch claims nothing until the
 	// breaker lets it through, so the step has to keep ticking until it does. A

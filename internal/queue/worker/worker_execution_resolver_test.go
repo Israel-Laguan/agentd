@@ -55,6 +55,15 @@ func resolverCases(store *testutil.FakeKanbanStore) []resolverCase {
 			want:    executionAgentMissingRoute,
 		},
 		{
+			// Phase planning is a builtin step, not an exec turn, so a
+			// review-required profile keeps it instead of routing it to ACP.
+			name:    "review required keeps phase planning",
+			worker:  &Worker{store: store},
+			task:    models.Task{Title: "plan phase 2"},
+			profile: models.AgentProfile{RequireReview: true},
+			want:    executionAgentPhasePlanning,
+		},
+		{
 			name:   "phase planning",
 			worker: &Worker{store: store},
 			task:   models.Task{Title: "plan phase 2"},

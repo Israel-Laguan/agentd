@@ -1,6 +1,6 @@
 # What the chat needs: direct calls, a read-only agent, or both (SP-029)
 
-agentd's chat (`POST /v1/chat/completions`, `frontdesk.Planner`) and comment intake (`frontdesk.IntakeProcessor`) answer no question themselves. They report board status, plan, or ask back, and every question becomes a text task that the builtin loop runs. That loop leaves agentd ([harness-extraction.md](harness-extraction.md)), so this page records what the chat needs, what a direct model call can do with data agentd gathers itself, and what a read-only external agent costs. No tool loop inside agentd is considered under any option.
+agentd's chat (`POST /v1/chat/completions`, `frontdesk.Planner`) and comment intake (`frontdesk.IntakeProcessor`) answer no question themselves. They report board status, plan, or ask back, and every question becomes a text task. Worker dispatch routes that task's `exec.turn` to the project's ACP agent; a task with no ACP route fails with `FAILED_REQUIRES_HUMAN`. The builtin loop no longer runs this path (it leaves agentd, [harness-extraction.md](harness-extraction.md)), so this page records what the chat needs, what a direct model call can do with data agentd gathers itself, and what a read-only external agent costs. No tool loop inside agentd is considered under any option.
 
 Measured 2026-11-11 on `main` at `f18b820d`. Claims are tagged **[run]** (measured here, with the run count), **[read]** (read from the code) or **[inferred]**.
 
@@ -16,9 +16,9 @@ Measured 2026-11-11 on `main` at `f18b820d`. Claims are tagged **[run]** (measur
 1. **The seam does not carry the chat.** `Planner.Agent` is a `stage.Agent`, but it is wired to `stage.NewModelAgent(deps.Gateway)` (`api/server/server.go:60`). Comment intake is wired the same way (`cmd/agentd/start_runtime.go:49`) [read]. Only the worker routes a stage to an acp agent (`routedStageAgent`, `callACP` in `queue/worker/acp_routing.go`), and that path needs a task, a project with a `WorkspacePath`, and an agent profile [read]. Adding purposes to `stageAgentPurposes` would only let the config load. Unscoped chat has no project, and so no workspace to bind [read].
 2. **`AccessNone` binds the workspace read-only.** `callACP` passes `readOnly = req.Access != AccessWrite` to the jail. `NoWorkspace` only refuses permission requests [read], and opencode does not ask before a read (preset config `{"bash": "ask", "edit": "ask"}`). So under `AccessNone`, opencode can still read the workspace [inferred].
 3. **A question becomes a text task only on some paths.** Comment intake and approved-scope chat go straight to `intake.Plan` [read]. Unscoped chat classifies first, and the classifier has no "question" intent. On `codestral-latest` it sent explain and pros/cons questions and "Where is the per-phase task cap configured?" to `plan_request` in 7 of 7 answered runs, and "What does this project do?" to `ambiguous` in 1 of 1 [run, 8 answered of 20; the other 12 were 429s].
-4. **ACP execution access follows task intent and profile policy.** `runACPExecution` runs tasks with `requires_workspace_change: false` read-only, even on a writable agent, and rejects workspace-changing tasks on read-only profiles (`queue/worker/acp_execution.go:46-59`) [read]. This is the T-082 behaviour, implemented in T-070/PR 02; the pre-PR text read access from `profile.WorkspaceReadonly` alone.
+4. **ACP execution access follows the task's explicit classification.** `runACPExecution` runs a task the plan explicitly marked `requires_workspace_change: false` read-only, even on a writable agent, and rejects workspace-changing tasks on read-only profiles (`queue/worker/acp_execution.go:56-65`) [read]. A task that omitted the field is unclassified and keeps write access. This is the T-082 behaviour, implemented in T-070/PR 02; the pre-PR text read access from `profile.WorkspaceReadonly` alone.
 5. **Every ACP stage call cold-starts the agent** (`acp_routing.go:108`, marked as a shortcut) [read].
-6. **A direct call's gathered data is capped at 12,000 chars per message.** The router's default (`routing/router.go:19`) and `gateway.truncator.max_input_chars` (default 12,000) cut each message head and tail [read]. A 35,432-char gathered prompt reached the model as about 3,300 tokens [run, 3 answered `codestral-latest` runs].
+6. **A direct call's input is cut to the routed provider's budget.** The router truncates to a positive `MaxInputChars()` on the selected provider, and otherwise falls back to its own default (`routing/router.go:19`, `gateway.truncator.max_input_chars`, default 12,000); `SkipTruncation` bypasses truncation for middleware calls such as summarization [read]. With the default config the budget is 12,000, so a 35,432-char gathered prompt reached the model as about 3,300 tokens [run, 3 answered `codestral-latest` runs].
 
 ## Capability table
 
@@ -68,7 +68,7 @@ Setup [run]: opencode `opencode/deepseek-v4.1-flash-free`, driven by `Worker.acp
 
 **What it costs against a direct call:** for a workspace question, about 30 times the tokens and about 40 times the latency (p50 against p50) [run: 9 opencode runs, 3 `codestral-latest` runs]. For a question that does not need the workspace, the direct call avoids that cost entirely. Planned as a text task after T-070, the same question would cost an agent run, at least the 21,000 floor (SP-022) and 46,000–275,000 measured here [run, 9 opencode runs].
 
-**Why not (a), direct calls only:** a direct call cannot search. Gathering more data than fits in 12,000 chars needs either a larger budget or a model-chosen search, and the second is the start of a tool loop.
+**Why not (a), direct calls only:** a direct call cannot search. Gathering more data than fits in the routed provider's budget (12,000 chars by default) needs either a larger budget or a model-chosen search, and the second is the start of a tool loop.
 
 **Why not (b), the agent for every question:** it pays 14–83 times the tokens for questions that need no workspace [run: 9 opencode runs against 3 `codestral-latest` runs].
 
@@ -76,7 +76,7 @@ Setup [run]: opencode `opencode/deepseek-v4.1-flash-free`, driven by `Worker.acp
 
 ## What T-070 did with text tasks
 
-- **Run a text task read-only.** In `runACPExecution`, take `AccessReadOnly` when `requires_workspace_change` is false, not only when the profile is read-only (fact 4). Size: S; folded into T-070 (`executionAccess`). [done]
+- **Run a text task read-only.** In `runACPExecution`, take `AccessReadOnly` when the plan explicitly sets `requires_workspace_change: false` (not when the field is omitted), not only when the profile is read-only (fact 4). Size: S; folded into T-070 (`executionAccess`). [done]
 - **Reject an empty result on a text task.** opencode reported `{"answer": ""}` once and the contract accepted it [run, 1 of 9]; cline did twice [run, 2 of 6 answered runs]. The `exec.turn` contract (`acpExecution{Summary}`) has the same shape, so an empty summary would likely pass too [inferred]. Size: XS.
 - **Until the answer intent exists, expect each text task to cost an agent run:** 46,000–275,000 tokens and 17–127 s on opencode for read-only questions [run, 9 runs], not the 21,000 floor (SP-022).
 - A text task with no `exec.turn` route fails `FAILED_REQUIRES_HUMAN` as T-070 plans [read]; nothing here changes that.
@@ -85,8 +85,8 @@ Setup [run]: opencode `opencode/deepseek-v4.1-flash-free`, driven by `Worker.acp
 
 | ID | What | Size |
 |---|---|---|
-| T-081 | Chat answer intent: the classifier gains a question intent; one direct call answers general, failure and memory questions from gathered data (status, events, handoff note, recall) within the 12,000-char budget, with a new response kind. No tools. Live test behind `-tags live` | M |
-| T-082 | ACP text tasks run read-only: access follows `requires_workspace_change: false` — **done in T-070/PR 02** (folded into `executionAccess`) | S |
+| T-081 | Chat answer intent: the classifier gains a question intent; one direct call answers general, failure and memory questions from gathered data (status, events, handoff note, recall) within the routed provider's input budget (12,000 by default), with a new response kind. No tools. Live test behind `-tags live` | M |
+| T-082 | ACP text tasks run read-only: access follows an explicit `requires_workspace_change: false` (an omitted field stays writable) — **done in T-070/PR 02** (folded into `executionAccess`) | S |
 | B-100 | An empty `answer` or `summary` passes the ACP result contract; reject it with the repair prompt (opencode 1 of 9, cline 2 of 6 answered runs) | XS |
 | T-083 | Route chat workspace questions to a read-only text task in the project the user names (`approved_scopes`), and post the answer back to the chat or the board | M |
 | SP-030 | Done in this spike: the cline preset copies the `cline-pass` (ClinePass) login when present and passes it as `CLINE_PROVIDER`; `lastUsedProvider` is not what ACP sessions read (`presets.go`, `preset_test.go`) | S |
@@ -96,7 +96,7 @@ Setup [run]: opencode `opencode/deepseek-v4.1-flash-free`, driven by `Worker.acp
 
 - **cline:** 3 of the last 9 runs hit the ClinePass inference cap, so Q3 has no cline answer; tokens are never reported.
 - **The general-question direct answer:** 3 of 3 runs were 429s, as were 6 of 9 code-question runs (all 3 for the per-phase cap) and 12 of 20 classify runs.
-- **A direct call with a larger budget** than 12,000 chars, or with the file list placed so the head/tail cut keeps it.
+- **A direct call with a larger budget** than the default 12,000 chars (a provider `max_input_chars`), or with the file list placed so the head/tail cut keeps it.
 - **The full text-task path after T-070** (`dispatchProcess` with the T-067 context pack). The probe used the stage-call path with a short prompt, so a real text task's tokens may be higher.
 - The mockllm server and `make test-e2e`; J03, J04 and J13 were read, not run.
 - opencode on any other model; agy.

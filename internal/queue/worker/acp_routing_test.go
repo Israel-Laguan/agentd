@@ -20,6 +20,8 @@ import (
 	agentmcp "agentd/internal/mcp"
 	"agentd/internal/models"
 	"agentd/internal/queue/runaudit"
+	"agentd/internal/queue/safety"
+	"agentd/internal/sandbox"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
 
@@ -134,7 +136,7 @@ func acpTask(t *testing.T, title, description string, flagged bool) (*testutil.F
 	store := testutil.NewFakeStore()
 	store.SetProjectsDir(t.TempDir())
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{ProjectName: "acp", Description: "d",
-		Tasks: []models.DraftTask{{Title: title, Description: description, RequiresWorkspaceChange: flagged}}})
+		Tasks: []models.DraftTask{{Title: title, Description: description, RequiresWorkspaceChange: flagged, RequiresWorkspaceChangeSet: true}}})
 	if err != nil {
 		t.Fatalf("MaterializePlan: %v", err)
 	}
@@ -164,6 +166,40 @@ func TestResolveExecutionAgentPicksTheACPAgentAnExecTurnRouteNames(t *testing.T)
 	w.routes = route.Table{}
 	if got := w.resolveExecutionAgent(context.Background(), task, project, profile); got.kind != executionAgentMissingRoute {
 		t.Fatalf("resolution with no routes = %q, want %q", got.kind, executionAgentMissingRoute)
+	}
+}
+
+func TestACPExecutionDoesNotCloseTheGlobalBreaker(t *testing.T) {
+	t.Parallel()
+	script := fakeagent.Script(report(map[string]any{"summary": "done"}))
+	w, store, task, project, profile, _, _ := acpFixture(t, script, false)
+	breaker := safety.NewCircuitBreaker()
+	breaker.ForceStateForTest(safety.BreakerHalfOpen, time.Now())
+	w.breaker = breaker
+	w.dispatchProcess(context.Background(), task, project, profile)
+
+	got, err := store.GetTask(context.Background(), task.ID)
+	if err != nil || got.State != models.TaskStateCompleted {
+		t.Fatalf("task = %+v, %v; want COMPLETED", got, err)
+	}
+	if breaker.State() == safety.BreakerClosed {
+		t.Fatal("an ACP completion closed the breaker; only a provider request may do that")
+	}
+}
+
+// The skip is scoped to the ACP path: a builtin completion still closes the
+// breaker, which is how the provider probe recovers.
+func TestCommitSucceededRecordsBreakerSuccessOutsideACP(t *testing.T) {
+	t.Parallel()
+	store, task, _, _ := acpTask(t, "work", "do the thing", false)
+	breaker := safety.NewCircuitBreaker()
+	breaker.ForceStateForTest(safety.BreakerHalfOpen, time.Now())
+	w := NewWorker(store, nil, &routingTestSandbox{}, breaker, &mockEventSink{}, WorkerOptions{})
+	if !w.commitSucceeded(context.Background(), task, sandbox.Result{Success: true}, nil) {
+		t.Fatal("commitSucceeded did not persist the result")
+	}
+	if w.breaker.State() != safety.BreakerClosed {
+		t.Fatalf("breaker state = %s, want CLOSED", w.breaker.State())
 	}
 }
 

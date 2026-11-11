@@ -61,8 +61,16 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 		w.runACPExecution(ctx, task, project, profile, resolved)
 		return
 	}
-	if resolved.kind == executionAgentHostReport && w.tryRenderHostReport(ctx, task, project) {
-		return
+	if resolved.kind == executionAgentHostReport {
+		if w.tryRenderHostReport(ctx, task, project, profile) {
+			return
+		}
+		// The renderer steps aside when the facts are incomplete or absent;
+		// the external agent is the model path that can still finish the task.
+		if resolved = w.resolveExecutionRoute(task); resolved.kind == executionAgentACP {
+			w.runACPExecution(ctx, task, project, profile, resolved)
+			return
+		}
 	}
 	w.failTerminal(ctx, task, fmt.Errorf("no ACP route for exec.turn (task agent %q)", task.AgentID), models.TaskStateFailedRequiresHuman)
 }
@@ -76,17 +84,24 @@ func (w *Worker) resolveForGoldenRepair(ctx context.Context, task models.Task, p
 }
 
 func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {
+	// Phase planning appends continuation tasks in the builtin path; it is not
+	// an exec turn and must keep running under a review-required profile.
+	if planning.IsPhasePlanningTask(task.Title) {
+		return executionResolution{kind: executionAgentPhasePlanning}
+	}
 	// A review-required task must go through createReviewHandoff, not the
 	// roll-up: tryRollUpBreakdown commits the parent directly, which would
 	// complete it with no human review (T-068).
 	if profile.RequireReview {
+		// A report the renderer can produce still goes to review; otherwise the
+		// task needs an ACP route, like any other exec turn.
+		if _, ok := hostreport.ReportTarget(task.Title, task.Description); ok {
+			return executionResolution{kind: executionAgentHostReport}
+		}
 		return w.resolveExecutionRoute(task)
 	}
 	if w.hasBreakdownToRollUp(ctx, task) {
 		return executionResolution{kind: executionAgentRollup}
-	}
-	if planning.IsPhasePlanningTask(task.Title) {
-		return executionResolution{kind: executionAgentPhasePlanning}
 	}
 	// An external agent runs the task whole: no tiered split, no host-report shortcut.
 	resolved := w.resolveExecutionRoute(task)

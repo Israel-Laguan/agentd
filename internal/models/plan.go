@@ -148,6 +148,10 @@ type DraftTask struct {
 	GoldenCriteria  []GoldenCriterion `json:"golden_criteria,omitempty"`
 	// RequiresWorkspaceChange marks a task that must change the workspace.
 	RequiresWorkspaceChange bool `json:"requires_workspace_change,omitempty"`
+	// RequiresWorkspaceChangeSet records that the field was present in the
+	// plan JSON, so materialization can tell an explicit false (text-only) from
+	// an omitted field (unclassified, which keeps write access).
+	RequiresWorkspaceChangeSet bool `json:"-"`
 	// SplitChild marks a draft created by the split stage, so the store links
 	// it to its parent with a SPLIT relation instead of an ordinary BLOCKS
 	// dependency. It is never read from plan JSON.
@@ -223,6 +227,10 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*d = DraftTask(raw.alias)
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) == nil {
+		_, d.RequiresWorkspaceChangeSet = fields["requires_workspace_change"]
+	}
 	if d.ReferenceID == "" {
 		d.ReferenceID = raw.ReferenceIDLegacy
 	}

@@ -55,9 +55,14 @@ type Task struct {
 	GoldenCriteria       []GoldenCriterion `json:"golden_criteria,omitempty"`
 	// RequiresWorkspaceChange marks a task that must change the workspace, so a
 	// run of it cannot finish on text alone (B-082).
-	RequiresWorkspaceChange bool     `json:"requires_workspace_change"`
-	CriteriaMet             []string `json:"criteria_met"`
-	DependsOn               []string `json:"depends_on"`
+	RequiresWorkspaceChange bool `json:"requires_workspace_change"`
+	// RequiresWorkspaceChangeClassified is true when RequiresWorkspaceChange was
+	// set explicitly (by the plan classifier or a caller), not left at its zero
+	// value. Only a classified false task is text-only; an unclassified task
+	// keeps write access.
+	RequiresWorkspaceChangeClassified bool     `json:"-"`
+	CriteriaMet                       []string `json:"criteria_met"`
+	DependsOn                         []string `json:"depends_on"`
 }
 
 // TaskResult is the durable outcome reported by a worker after running a task.

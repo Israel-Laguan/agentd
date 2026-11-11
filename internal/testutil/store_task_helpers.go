@@ -61,16 +61,17 @@ func (s *FakeKanbanStore) blockParentTaskLocked(id string, ts time.Time) *models
 
 func (s *FakeKanbanStore) newTaskFromDraft(projectID string, ts time.Time, d models.DraftTask) models.Task {
 	return models.Task{
-		BaseEntity:              models.BaseEntity{ID: s.nextID(), CreatedAt: ts, UpdatedAt: ts},
-		ProjectID:               projectID,
-		AgentID:                 resolveTaskAgentID(d.AgentID),
-		Title:                   d.Title,
-		Description:             d.Description,
-		State:                   models.TaskStateReady,
-		Assignee:                d.Assignee,
-		SuccessCriteria:         append([]string(nil), d.SuccessCriteria...),
-		GoldenCriteria:          append([]models.GoldenCriterion(nil), d.GoldenCriteria...),
-		RequiresWorkspaceChange: d.RequiresWorkspaceChange,
+		BaseEntity:                        models.BaseEntity{ID: s.nextID(), CreatedAt: ts, UpdatedAt: ts},
+		ProjectID:                         projectID,
+		AgentID:                           resolveTaskAgentID(d.AgentID),
+		Title:                             d.Title,
+		Description:                       d.Description,
+		State:                             models.TaskStateReady,
+		Assignee:                          d.Assignee,
+		SuccessCriteria:                   append([]string(nil), d.SuccessCriteria...),
+		GoldenCriteria:                    append([]models.GoldenCriterion(nil), d.GoldenCriteria...),
+		RequiresWorkspaceChange:           d.RequiresWorkspaceChange,
+		RequiresWorkspaceChangeClassified: d.RequiresWorkspaceChangeSet,
 	}
 }
 

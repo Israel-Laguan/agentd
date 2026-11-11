@@ -17,10 +17,11 @@ import (
 // identifiers are never read. It returns false, leaving the task untouched,
 // when the task is not a report task, when no host facts were collected, or
 // when the collection is partial: retrying the render on the same workspace
-// cannot produce the missing facts (the collectors already ran), and no ACP
-// route can either, so the task fails with the render reason on its event log
-// rather than burning the retry budget on an unchanged workspace (B-046).
-func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, project models.Project) bool {
+// cannot produce the missing facts (the collectors already ran), so the
+// dispatch falls back to the task's ACP route, and fails with the render reason
+// on its event log when it has none rather than burning the retry budget on an
+// unchanged workspace (B-046).
+func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) bool {
 	if w.goldenRepairPending(ctx, task) {
 		return false
 	}
@@ -51,6 +52,12 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 			return true
 		}
 
+	}
+	if profile.RequireReview {
+		// The renderer produces the report, but a review-required profile still
+		// has to approve it before the task completes.
+		w.CommitTextWithProfile(ctx, task, report, &profile)
+		return true
 	}
 	w.commit(ctx, task, sandbox.Result{Success: true, Stdout: report}, nil)
 	return true

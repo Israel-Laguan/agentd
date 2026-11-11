@@ -34,15 +34,31 @@ func (e acpExecution) Validate() error {
 	return nil
 }
 
+// skipGlobalBreakerSuccessKey marks a context whose completion is not evidence
+// of a provider request: an ACP turn runs on an external agent and agentd makes
+// no provider call of its own.
+type skipGlobalBreakerSuccessKey struct{}
+
+func withoutGlobalBreakerSuccess(ctx context.Context) context.Context {
+	return context.WithValue(ctx, skipGlobalBreakerSuccessKey{}, true)
+}
+
+func breakerSuccessSkipped(ctx context.Context) bool {
+	skip, _ := ctx.Value(skipGlobalBreakerSuccessKey{}).(bool)
+	return skip
+}
+
 // executionAccess is the workspace access an execution stage runs with: a task
-// that changes nothing runs read-only even on a writable agent (SP-029), and a
-// read-only agent that is handed a task that changes the workspace cannot do it.
+// the plan explicitly classified as text-only runs read-only even on a writable
+// agent (SP-029), and a read-only agent that is handed a task that changes the
+// workspace cannot do it. An unclassified task (the field was omitted, or the
+// row predates the column) keeps write access.
 func (w *Worker) executionAccess(ctx context.Context, task models.Task, profile models.AgentProfile) (stage.WorkspaceAccess, bool) {
 	if profile.WorkspaceReadonly && task.RequiresWorkspaceChange {
 		w.failTerminal(ctx, task, stage.ErrUnverifiedCompletion, models.TaskStateFailedRequiresHuman)
 		return stage.AccessNone, false
 	}
-	if !task.RequiresWorkspaceChange {
+	if task.RequiresWorkspaceChangeClassified && !task.RequiresWorkspaceChange {
 		return stage.AccessReadOnly, true
 	}
 	return stage.AccessWrite, true
@@ -67,6 +83,10 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	if !ok {
 		return
 	}
+	// The agent runs the task; agentd makes no provider request for it. A
+	// completion here must not be read as the provider recovering (the global
+	// breaker is fed by the calls agentd still makes).
+	ctx = withoutGlobalBreakerSuccess(ctx)
 	ctx = gateway.WithTaskID(ctx, task.ID)
 	taskHooks, _ := w.MountAgenticHooks(project, profile)
 	if err := w.RunSessionStart(ctx, task, project, taskHooks); err != nil {

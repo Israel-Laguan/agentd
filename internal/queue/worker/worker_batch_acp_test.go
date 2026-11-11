@@ -16,6 +16,7 @@ func TestTextBatchUsesEachTasksACPRoute(t *testing.T) {
 	for i := range tasks {
 		tasks[i].AgentID = route.DefaultAgentID
 		tasks[i].RequiresWorkspaceChange = false
+		tasks[i].RequiresWorkspaceChangeClassified = true
 		tasks[i].Title = fakeagent.Script(report(map[string]any{"summary": "ACP completed"}))
 	}
 	store := &batchTestStore{

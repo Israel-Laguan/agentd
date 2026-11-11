@@ -42,6 +42,21 @@ func TestReadyTaskWithoutExecTurnRouteFailsToHuman(t *testing.T) {
 	t.Fatalf("events = %+v; want the missing exec.turn route named", events)
 }
 
+// An unclassified task (the plan omitted the field) keeps write access: only a
+// task the plan explicitly classified as text-only is read-only.
+func TestUnclassifiedTextTaskRunsOnWritableACPWorkspace(t *testing.T) {
+	script := fakeagent.Script(report(map[string]any{"summary": "done"}))
+	w, store, task, project, profile, _, log := acpFixture(t, script, false)
+	task.RequiresWorkspaceChangeClassified = false
+	w.dispatchProcess(context.Background(), task, project, profile)
+	if got := mustGetTask(t, store, task.ID).State; got != models.TaskStateCompleted {
+		t.Fatalf("state = %s, want COMPLETED", got)
+	}
+	if got := log.all(); len(got) != 1 || got[0] {
+		t.Fatalf("ACP read-only arguments = %v, want [false] for an unclassified task", got)
+	}
+}
+
 func TestTextTaskRunsOnReadOnlyACPWorkspace(t *testing.T) {
 	script := fakeagent.Script(report(map[string]any{"summary": "done"}))
 	w, store, task, project, profile, _, log := acpFixture(t, script, false)

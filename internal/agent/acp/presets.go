@@ -120,12 +120,18 @@ func clineHome(l Launch) ([]string, error) {
 	}
 	var providers map[string]json.RawMessage
 	_ = json.Unmarshal(file["providers"], &providers) // a missing or odd field leaves no login
-	login, ok := providers[clineProvider]
-	if !ok {
+	login, hasLogin := providers[clineProvider]
+	pass, hasPass := providers[clinePassProvider]
+	if !hasLogin && !hasPass {
 		return nil, fmt.Errorf("acp: %s has no login for provider %q", l.Credentials, clineProvider)
 	}
-	keep, last := map[string]json.RawMessage{clineProvider: login}, clineProvider
-	if pass, ok := providers[clinePassProvider]; ok {
+	// ClinePass can be the only login: cline reads it from the same providers
+	// file and the same auth storage as its own. Keep whichever entries exist.
+	keep, last := map[string]json.RawMessage{}, clineProvider
+	if hasLogin {
+		keep[clineProvider] = login
+	}
+	if hasPass {
 		keep[clinePassProvider], last = pass, clinePassProvider
 	}
 	file["providers"], _ = json.Marshal(keep)

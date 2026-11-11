@@ -81,7 +81,8 @@ func TestPlanningPromptAsksForRequiresWorkspaceChange(t *testing.T) {
 	got := phasePlanningPrompt(0)
 	for _, want := range []string{
 		"Set requires_workspace_change to true on every task that must create or change a file, or run a command, in the project workspace.",
-		"Set it to false, or leave it out, on a task that only reasons or writes text",
+		"Set it to false on a task that only reasons or writes text",
+		"When unsure whether a task changes the workspace, leave it out: an omitted value keeps write access, while an explicit false is read-only.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("planning prompt missing %q:\n%s", want, got)
@@ -100,6 +101,9 @@ func TestPlanCarriesRequiresWorkspaceChange(t *testing.T) {
 	}
 	if !plan.Tasks[0].RequiresWorkspaceChange || plan.Tasks[1].RequiresWorkspaceChange {
 		t.Fatalf("tasks = %+v, want only the first marked", plan.Tasks)
+	}
+	if !plan.Tasks[0].RequiresWorkspaceChangeSet || plan.Tasks[1].RequiresWorkspaceChangeSet {
+		t.Fatalf("classification = %+v, want only the first marked as classified", plan.Tasks)
 	}
 }
 

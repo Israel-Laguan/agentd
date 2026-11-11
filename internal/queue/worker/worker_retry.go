@@ -122,7 +122,10 @@ func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result s
 		w.handleFailedSandboxResult(ctx, task, result, err)
 		return false
 	}
-	if w.breaker != nil {
+	// An ACP task makes no provider request of its own, so its completion is not
+	// evidence the provider recovered. runACPExecution marks that context; a
+	// completion on another path still records the provider outcome here.
+	if w.breaker != nil && !breakerSuccessSkipped(ctx) {
 		w.breaker.RecordSuccess()
 	}
 	payload := fmt.Sprintf("exit=%d duration=%s\n%s", result.ExitCode, result.Duration, result.Stdout)
