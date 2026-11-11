@@ -114,6 +114,15 @@ func (s *session) evidence() int {
 // noteToolCall records a tool call's latest kind and status. ACP lets either
 // change in a later update, so a call counts as evidence only when both its
 // latest values qualify.
+// recordedKind is the kind ACP last recorded for a tool call, or "" when the
+// call is unknown or its kind was never reported. A later request_permission
+// may omit it, so the driver falls back to this before refusing the call.
+func (s *session) recordedKind(id acpsdk.ToolCallId) acpsdk.ToolKind {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls[id].kind
+}
+
 func (s *session) noteToolCall(id acpsdk.ToolCallId, kind *acpsdk.ToolKind, status *acpsdk.ToolCallStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -173,6 +182,20 @@ func (c *client) RequestPermission(_ context.Context, p acpsdk.RequestPermission
 		return acpsdk.RequestPermissionResponse{Outcome: acpsdk.RequestPermissionOutcome{Cancelled: &acpsdk.RequestPermissionOutcomeCancelled{}}}, nil
 	}
 	perms := newPermissions(p.ToolCall)
+	// A later request_permission may omit the kind ACP recorded for the call
+	// (ToolCallUpdate.Kind is optional). Merge the recorded kind before the
+	// check: preserve an explicit request kind, otherwise use the recorded one,
+	// and keep the request denied when neither is known (decide refuses an
+	// empty kind). This lets an agent that first named the call report_outcome
+	// reach the driver instead of being refused as unknown.
+	if perms[0].Kind == "" {
+		if k := s.recordedKind(p.ToolCall.ToolCallId); k != "" {
+			for i := range perms {
+				perms[i].Kind = string(k)
+				perms[i].Tool = toolForKind[k]
+			}
+		}
+	}
 	perm := perms[0]
 	v := Verdict{Allow: true}
 	if !ownTool(perm, s.req.MCPServers) {

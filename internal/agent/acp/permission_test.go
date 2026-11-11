@@ -123,6 +123,31 @@ func TestOwnMCPToolsAreAllowedAndOthersRefused(t *testing.T) {
 	}
 }
 
+// An agent can name a call with kind other in its start, then request
+// permission for it with the title but no kind (ToolCallUpdate.Kind is
+// optional). The driver merges the recorded kind before ownTool, so the call
+// reaches the driver instead of being refused as unknown.
+func TestPermissionRequestOmitsKindAndUsesRecorded(t *testing.T) {
+	t.Parallel()
+	own := []acpsdk.McpServer{{Http: &acpsdk.McpServerHttpInline{Name: "agentd", Type: "http", Url: "http://x", Headers: []acpsdk.HttpHeader{}}}}
+	// The agent names the call as kind other in its start and asks permission
+	// with the title only; the driver must merge the recorded kind.
+	r, err := call(t, fakeDriver(t, Config{}), Request{MCPServers: own},
+		fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindOther, CallID: "call-1", Title: "agentd__report_outcome"}})
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if r.Text != "permission: allow_once" {
+		t.Fatalf("text = %q; want the own tool allowed once from the recorded kind", r.Text)
+	}
+	// Without the merge, the same request is refused as an unknown kind.
+	r, err = call(t, fakeDriver(t, Config{}), Request{MCPServers: own},
+		fakeagent.Step{Permission: &fakeagent.Permission{Title: "agentd__report_outcome"}})
+	if err != nil || r.Text != "permission: reject_once" {
+		t.Fatalf("no recorded kind: %q, %v; want it refused", r.Text, err)
+	}
+}
+
 // cline 3.0.74 appends the arguments to the title and renames dotted tools
 // with a hash (live, SP-029). Those names pass; lookalikes do not.
 func TestOwnToolNamesAsCline3Sends(t *testing.T) {

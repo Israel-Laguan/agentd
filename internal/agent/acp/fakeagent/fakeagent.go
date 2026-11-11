@@ -203,9 +203,27 @@ func (a *agent) say(ctx context.Context, session acp.SessionId, text string) err
 // ask offers cline's options, but with allow_always first, so a client that
 // takes the first option grants every later call too.
 func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) error {
+	id := acp.ToolCallId(fmt.Sprintf("call-%d", a.calls.Add(1)))
+	if p.CallID != "" {
+		// Name the call in its start, then ask permission for it with the title
+		// only: the driver must merge the recorded kind (ToolCallUpdate.Kind is
+		// optional, so the request carries none).
+		id = acp.ToolCallId(p.CallID)
+		start := acp.StartToolCall(id, p.Title, acp.WithStartKind(p.Kind), acp.WithStartStatus(acp.ToolCallStatusPending))
+		if err := a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionId: session, Update: start}); err != nil {
+			return err
+		}
+	}
+	// A permission request carries the kind only when the agent names it; the
+	// driver merges the recorded kind otherwise (ToolCallUpdate.Kind is
+	// optional).
+	toolCall := acp.ToolCallUpdate{ToolCallId: id, Title: acp.Ptr(p.Title), RawInput: p.RawInput}
+	if p.Kind != "" {
+		toolCall.Kind = acp.Ptr(p.Kind)
+	}
 	resp, err := a.conn.RequestPermission(ctx, acp.RequestPermissionRequest{
 		SessionId: session,
-		ToolCall:  acp.ToolCallUpdate{ToolCallId: acp.ToolCallId(fmt.Sprintf("call-%d", a.calls.Add(1))), Kind: acp.Ptr(p.Kind), Title: acp.Ptr(p.Title), RawInput: p.RawInput},
+		ToolCall:  toolCall,
 		Options: []acp.PermissionOption{
 			{OptionId: "allow_always", Name: "Allow always", Kind: acp.PermissionOptionKindAllowAlways},
 			{OptionId: "allow_once", Name: "Allow once", Kind: acp.PermissionOptionKindAllowOnce},

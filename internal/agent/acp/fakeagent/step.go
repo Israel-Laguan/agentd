@@ -64,6 +64,11 @@ type Permission struct {
 	Kind     acp.ToolKind `json:"kind"`
 	Title    string       `json:"title,omitempty"`
 	RawInput any          `json:"raw_input,omitempty"`
+	// CallID, when set, starts the call with this id and Kind before asking
+	// permission for it. It lets a test drive the driver's merge of a recorded
+	// kind: the agent names the call in its start and then asks with the title
+	// only (ToolCallUpdate.Kind is optional).
+	CallID string `json:"call_id,omitempty"`
 }
 
 // Script is the prompt that runs steps.
