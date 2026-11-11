@@ -214,7 +214,11 @@ func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) er
 			return err
 		}
 		// shortcut: the SDK handles a notification and the next request concurrently, so wait for the start to be recorded; a real agent can race the same way.
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-time.After(50 * time.Millisecond):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	// A permission request carries the kind only when the agent names it; the
 	// driver merges the recorded kind otherwise (ToolCallUpdate.Kind is

@@ -124,7 +124,7 @@ export function mapDaemonDraftPlan(raw: Record<string, unknown> | null | undefin
     const safeT = t ?? {};
     const rawID = safeT.ref_id ?? safeT.ReferenceID ?? safeT.temp_id ?? safeT.TempID;
     const id = typeof rawID === "string" ? rawID.trim() || undefined : undefined;
-    const rwc = safeT.requires_workspace_change;
+    const rwc = safeT.requires_workspace_change ?? safeT.RequiresWorkspaceChange;
     return {
       ...(id !== undefined ? { id } : {}),
       title: (safeT.title ?? safeT.Title ?? "") as string,

@@ -187,7 +187,10 @@ func (c *client) RequestPermission(_ context.Context, p acpsdk.RequestPermission
 	// and keep the request denied when neither is known (decide refuses an
 	// empty kind). This lets an agent that first named the call report_outcome
 	// reach the driver instead of being refused as unknown.
-	if p.ToolCall.Kind == nil || *p.ToolCall.Kind == "" {
+	if p.ToolCall.Kind != nil && *p.ToolCall.Kind != "" {
+		// An explicit kind replaces the recorded one, so a later request that omits it sees the latest.
+		s.noteToolCall(p.ToolCall.ToolCallId, p.ToolCall.Kind, nil)
+	} else {
 		if k := s.recordedKind(p.ToolCall.ToolCallId); k != "" {
 			p.ToolCall.Kind = &k
 		}
