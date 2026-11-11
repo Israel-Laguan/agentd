@@ -30,11 +30,13 @@ request-echo upstream:
 | Client `x-*` headers | No (not by default) |
 | Unknown top-level keys (e.g. `agentd_metadata`) | Yes, unchanged |
 
-On the agentd side, the in-process test
-[`plan_execute_integration_test.go`](../internal/queue/worker/plan_execute_integration_test.go)
-checks that `metadata` goes out on the wire with the right values on every
-worker request. It uses the real `openai` adapter over HTTP against a fake
-OpenAI server.
+On the agentd side, `send_task_metadata` puts the right `task_id` and
+`agent_id` on the request: the adapter's own tests
+([`openai_test.go`](../internal/gateway/providers/openai_test.go),
+`TestOpenAI_SendTaskMetadata_*`) pin what goes out on the wire, and the worker
+attaches the task to the context of every call it makes
+(`spec.WithTaskID`). The end-to-end worker test that drove a whole plan through
+the openai adapter went with the builtin loop in T-070.
 
 ### Forwarding the correlation upstream
 
