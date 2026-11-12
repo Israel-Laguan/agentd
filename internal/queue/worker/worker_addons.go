@@ -59,7 +59,8 @@ func (w *Worker) handleTaskBreakdown(ctx context.Context, task models.Task, subt
 			Assignee:    models.TaskAssigneeSystem,
 			SplitChild:  true,
 			// The split contract carries no flag, so a child keeps its parent's.
-			RequiresWorkspaceChange: task.RequiresWorkspaceChange,
+			RequiresWorkspaceChange:    task.RequiresWorkspaceChange,
+			RequiresWorkspaceChangeSet: task.RequiresWorkspaceChangeClassified,
 		})
 	}
 	if len(drafts) == 0 {

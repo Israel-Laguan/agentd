@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"agentd/internal/gateway"
@@ -14,21 +15,15 @@ import (
 type executionAgent string
 
 const (
-	executionAgentReview        executionAgent = "builtin-review"
 	executionAgentRollup        executionAgent = "builtin-rollup"
 	executionAgentPhasePlanning executionAgent = "builtin-phase-planning"
-	executionAgentTieredOrigin  executionAgent = "builtin-tiered-origin"
-	executionAgentTieredStep    executionAgent = "builtin-tiered"
 	executionAgentHostReport    executionAgent = "builtin-host-report"
-	executionAgentAgentic       executionAgent = "builtin-agentic"
 	executionAgentACP           executionAgent = "acp"
+	executionAgentMissingRoute  executionAgent = "missing-exec-route"
 )
 
 type executionResolution struct {
-	kind             executionAgent
-	tieredSteps      []models.Task
-	tieredStepsKnown bool
-	tieredStepsErr   error
+	kind executionAgent
 	// route and agent are the exec.turn decision and its acp agent (executionAgentACP).
 	route route.Decision
 	agent route.Agent
@@ -56,83 +51,74 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 		} else if handled {
 			return
 		}
+		resolved = w.resolveExecutionRoute(task)
 	case executionAgentPhasePlanning:
 		slog.DebugContext(ctx, "worker: handling phase planning", "task_id", task.ID)
 		w.handlePhasePlanning(ctx, task, project)
 		return
-	case executionAgentTieredOrigin:
-		if w.tryTieredOrigin(ctx, task, resolved.tieredSteps, resolved.tieredStepsKnown, resolved.tieredStepsErr) {
-			return
-		}
-	case executionAgentACP:
+	}
+	if resolved.kind == executionAgentACP {
 		w.runACPExecution(ctx, task, project, profile, resolved)
 		return
 	}
-	release, ok := w.gateProvider(ctx, task, profile.Provider)
-	if !ok {
-		return
+	if resolved.kind == executionAgentHostReport {
+		if w.tryRenderHostReport(ctx, task, project, profile) {
+			return
+		}
+		// The renderer steps aside when the facts are incomplete or absent;
+		// the external agent is the model path that can still finish the task.
+		if resolved = w.resolveExecutionRoute(task); resolved.kind == executionAgentACP {
+			w.runACPExecution(ctx, task, project, profile, resolved)
+			return
+		}
 	}
-	defer release()
-	if w.dispatchTieredStep(ctx, task, project, profile) {
-		return
-	}
-	if w.tryRenderHostReport(ctx, task, project) {
-		return
-	}
-	slog.DebugContext(ctx, "worker: entering agentic loop", "task_id", task.ID)
-	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
-		w.handleLoopResult(ctx, task, result)
-	}
+	w.failTerminal(ctx, task, fmt.Errorf("no ACP route for exec.turn (task agent %q)", task.AgentID), models.TaskStateFailedRequiresHuman)
 }
 
 func (w *Worker) resolveForGoldenRepair(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {
 	resolved := w.resolveExecutionAgent(ctx, task, project, profile)
-	if !w.goldenRepairPending(ctx, task) || (resolved.kind != executionAgentRollup && resolved.kind != executionAgentTieredOrigin && resolved.kind != executionAgentHostReport) {
+	if !w.goldenRepairPending(ctx, task) || (resolved.kind != executionAgentRollup && resolved.kind != executionAgentHostReport) {
 		return resolved
 	}
-	if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
-		return executionResolution{kind: executionAgentACP, route: d, agent: a}
-	}
-	return executionResolution{kind: executionAgentAgentic}
+	return w.resolveExecutionRoute(task)
 }
 
 func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {
+	// Phase planning appends continuation tasks in the builtin path; it is not
+	// an exec turn and must keep running under a review-required profile.
+	if planning.IsPhasePlanningTask(task.Title) {
+		return executionResolution{kind: executionAgentPhasePlanning}
+	}
+	// A review-required task must go through createReviewHandoff, not the
+	// roll-up: tryRollUpBreakdown commits the parent directly, which would
+	// complete it with no human review (T-068).
 	if profile.RequireReview {
-		// A tiered step keeps its own dispatch path, so only whole tasks go to ACP.
-		if !w.isTieredStep(task) {
-			if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
-				return executionResolution{kind: executionAgentACP, route: d, agent: a}
-			}
+		// A report the renderer can produce still goes to review; otherwise the
+		// task needs an ACP route, like any other exec turn.
+		if _, ok := hostreport.ReportTarget(task.Title, task.Description); ok {
+			return executionResolution{kind: executionAgentHostReport}
 		}
-		return executionResolution{kind: executionAgentReview}
+		return w.resolveExecutionRoute(task)
 	}
 	if w.hasBreakdownToRollUp(ctx, task) {
 		return executionResolution{kind: executionAgentRollup}
 	}
-	if planning.IsPhasePlanningTask(task.Title) {
-		return executionResolution{kind: executionAgentPhasePlanning}
-	}
-	if w.isTieredStep(task) {
-		return executionResolution{kind: executionAgentTieredStep}
-	}
-	steps, err := w.tieredStepChildren(ctx, task)
-	if err != nil {
-		return executionResolution{kind: executionAgentTieredOrigin, tieredStepsErr: err}
-	}
-	if len(steps) > 0 {
-		return executionResolution{kind: executionAgentTieredOrigin, tieredSteps: steps, tieredStepsKnown: true}
-	}
 	// An external agent runs the task whole: no tiered split, no host-report shortcut.
-	if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
-		return executionResolution{kind: executionAgentACP, route: d, agent: a}
-	}
-	if w.ShouldRunTiered(task) {
-		return executionResolution{kind: executionAgentTieredOrigin, tieredStepsKnown: true}
+	resolved := w.resolveExecutionRoute(task)
+	if resolved.kind == executionAgentACP {
+		return resolved
 	}
 	if _, ok := hostreport.ReportTarget(task.Title, task.Description); ok {
 		return executionResolution{kind: executionAgentHostReport}
 	}
-	return executionResolution{kind: executionAgentAgentic}
+	return resolved
+}
+
+func (w *Worker) resolveExecutionRoute(task models.Task) executionResolution {
+	if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
+		return executionResolution{kind: executionAgentACP, route: d, agent: a}
+	}
+	return executionResolution{kind: executionAgentMissingRoute}
 }
 
 func (w *Worker) hasBreakdownToRollUp(ctx context.Context, task models.Task) bool {

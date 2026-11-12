@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"agentd/internal/gateway"
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
+
+	acpsdk "github.com/coder/acp-go-sdk"
 )
 
 const validMainGo = "package main\n\nfunc main() {}\n"
@@ -34,9 +36,10 @@ func seedWorkspaceWithMain(t *testing.T, store *testutil.FakeKanbanStore, ctx co
 	proj, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "wordcount", Description: "d",
 		Tasks: []models.DraftTask{{
-			Title:           "Wire CountVowels into CLI",
-			Description:     testutil.AgenticTestTaskDescription(),
-			SuccessCriteria: criteria,
+			Title:                   "Wire CountVowels into CLI",
+			Description:             testutil.AgenticTestTaskDescription(),
+			SuccessCriteria:         criteria,
+			RequiresWorkspaceChange: true,
 		}},
 	})
 	if err != nil {
@@ -51,22 +54,33 @@ func seedWorkspaceWithMain(t *testing.T, store *testutil.FakeKanbanStore, ctx co
 	return tasks[0], *proj
 }
 
-// runPostconditionAgentic runs one agentic turn that edits main.go with sed,
-// then answers with text. The post-condition gate runs before that answer
-// commits, so a criterion file that no longer parses keeps the task from
-// completing.
+// runPostconditionAgentic uses the fake ACP agent to report a completed turn.
+// The post-condition gate still checks the workspace before committing it.
 func runPostconditionAgentic(t *testing.T, store *testutil.FakeKanbanStore, sb sandbox.Executor, task models.Task) (*mockEventSink, models.Task) {
 	t.Helper()
 	ctx := context.Background()
-	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{ID: task.AgentID, Provider: "openai", Model: "gpt-4", AgenticMode: true}); err != nil {
-		t.Fatalf("upsert profile: %v", err)
+	// The ACP path never invokes the supplied sandbox, so a breakingSandbox
+	// would otherwise leave main.go untouched. Write its malformed content into
+	// the workspace before the turn, which is the state the sandbox replays.
+	if broken, ok := sb.(breakingSandbox); ok {
+		project, err := store.GetProject(ctx, task.ProjectID)
+		if err != nil {
+			t.Fatalf("GetProject: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(project.WorkspacePath, "main.go"), []byte(broken.breakWith), 0o644); err != nil {
+			t.Fatalf("seed broken main.go: %v", err)
+		}
 	}
+	steps := []fakeagent.Step{{Did: acpsdk.ToolKindEdit}}
+	steps = append(steps, report(map[string]any{"summary": "done"}))
+	updated, err := store.UpdateTaskDescription(ctx, task.ID, task.UpdatedAt, task.Description+"\n"+fakeagent.Script(steps...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task = *updated
 	sink := &mockEventSink{}
-	gw := &sequenceGateway{responses: []gateway.AIResponse{
-		{ToolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "sed -i 's/x/y/' main.go")}},
-		{Content: "done"},
-	}}
-	w := NewWorker(store, gw, sb, nil, sink, WorkerOptions{})
+	rt, _, _ := acpRuntime(t)
+	w := NewWorker(store, nil, sb, nil, sink, WorkerOptions{Routes: acpRoutes(), ACP: rt})
 	w.Process(ctx, task)
 	after, err := store.GetTask(ctx, task.ID)
 	if err != nil {

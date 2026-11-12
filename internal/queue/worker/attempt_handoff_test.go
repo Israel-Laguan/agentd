@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"agentd/internal/agent/acp/fakeagent"
-	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/queue/worker/agentic"
@@ -85,19 +84,6 @@ func TestUnreadableHandoffRetriesWithoutAgentOrOverwrite(t *testing.T) {
 		}
 	}
 
-	t.Run("builtin", func(t *testing.T) {
-		store, task, project, _ := acpTask(t, "Fix tests", "d", false)
-		seed(t, store, task)
-		gw := &agenticHostGateway{}
-		NewWorker(store, gw, panicSandbox{t}, nil, &mockEventSink{}, WorkerOptions{}).
-			dispatchProcess(ctx, task, project, models.AgentProfile{AgenticMode: true, Provider: "openai"})
-		for _, req := range gw.requests {
-			if req.Purpose == gateway.PurposeExecTurn {
-				t.Fatal("agent turn ran without the previous attempt's handoff")
-			}
-		}
-		check(t, store, task)
-	})
 	t.Run("acp", func(t *testing.T) {
 		w, store, task, project, profile, _, _ := acpFixture(t, fakeagent.Script(fakeagent.Step{Error: "agent must not run"}), false)
 		seed(t, store, task)

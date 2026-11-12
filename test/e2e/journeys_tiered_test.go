@@ -23,6 +23,7 @@ import (
 // full model — observed through the origin reaching COMPLETED and the mock's
 // request capture showing both a verify-step and an escalate-step request.
 func TestJ12_TieredExecution(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}

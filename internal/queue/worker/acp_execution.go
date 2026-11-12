@@ -34,6 +34,27 @@ func (e acpExecution) Validate() error {
 	return nil
 }
 
+// skipGlobalBreakerSuccessKey marks a context whose completion is not evidence
+// of a provider request: an ACP turn runs on an external agent and agentd makes
+// no provider call of its own.
+type skipGlobalBreakerSuccessKey struct{}
+
+// executionAccess is the workspace access an execution stage runs with: a task
+// the plan explicitly classified as text-only runs read-only even on a writable
+// agent (SP-029), and a read-only agent that is handed a task that changes the
+// workspace cannot do it. An unclassified task (the field was omitted, or the
+// row predates the column) keeps write access.
+func (w *Worker) executionAccess(ctx context.Context, task models.Task, profile models.AgentProfile) (stage.WorkspaceAccess, bool) {
+	if profile.WorkspaceReadonly && task.RequiresWorkspaceChange {
+		w.failTerminal(ctx, task, stage.ErrUnverifiedCompletion, models.TaskStateFailedRequiresHuman)
+		return stage.AccessNone, false
+	}
+	if profile.WorkspaceReadonly || (task.RequiresWorkspaceChangeClassified && !task.RequiresWorkspaceChange) {
+		return stage.AccessReadOnly, true
+	}
+	return stage.AccessWrite, true
+}
+
 // runACPExecution runs the task on the acp agent its exec.turn route names and
 // applies the outcome as the builtin loop's is applied: a completion is
 // committed, a question goes to a human, an unverified completion fails to a
@@ -49,14 +70,14 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 		audit.failed = !succeeded && !audit.suspended
 		w.finishTaskAudit(task, project, route.KindACP, audit)
 	}()
-	access := stage.AccessWrite
-	if profile.WorkspaceReadonly {
-		if task.RequiresWorkspaceChange {
-			w.failTerminal(ctx, task, stage.ErrUnverifiedCompletion, models.TaskStateFailedRequiresHuman)
-			return
-		}
-		access = stage.AccessReadOnly
+	access, ok := w.executionAccess(ctx, task, profile)
+	if !ok {
+		return
 	}
+	// The agent runs the task; agentd makes no provider request for it. A
+	// completion here must not be read as the provider recovering (the global
+	// breaker is fed by the calls agentd still makes).
+	ctx = context.WithValue(ctx, skipGlobalBreakerSuccessKey{}, true)
 	ctx = gateway.WithTaskID(ctx, task.ID)
 	taskHooks, _ := w.MountAgenticHooks(project, profile)
 	if err := w.RunSessionStart(ctx, task, project, taskHooks); err != nil {

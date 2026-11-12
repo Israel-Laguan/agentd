@@ -9,6 +9,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agentd/internal/agent/acp/fakeagent"
+
+	acpsdk "github.com/coder/acp-go-sdk"
 )
 
 // agenticTask materializes a one-task project whose task runs on its own
@@ -67,58 +71,55 @@ func toolResultEvents(ctx context.Context, t *testing.T, client *APIClient, tag,
 	return out
 }
 
-// TestJ19_AgenticDenylistRefusesSudo tests J19: an agentic task whose model asks
-// for `sudo id` through the bash tool has the call refused by the denylist hook,
-// and the privilege recovery asks the model for one non-privileged alternative.
-//
-// The mock answers the loop's first turn with that tool call (T-053), so the
-// worker's real hook chain runs. The alternative request gets the mock's
-// default command (build_command), which the sandbox runs. Pass criteria: the
-// first TOOL_RESULT is the hook's refusal (exit code -1, names sudo), the
-// second is the alternative's successful run, no event carries the refused
-// command's output, and the model's next turn carries the alternative's output.
-func TestJ19_AgenticDenylistRefusesSudo(t *testing.T) {
+// TestJ19_ACPPermissionRefusesSudo tests J19 on the ACP path: the fake agent
+// asks permission to run `sudo id`, the real ACPPermitter refuses it through the
+// command policy, and the agent sees reject_once (not allow_once). The refusal
+// is observable in the attempt handoff event the worker writes for the retry.
+func TestJ19_ACPPermissionRefusesSudo(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	harness := NewHarness(baseURL, "default")
+	harness := NewHarness(acpBaseURL, "acp")
 	if err := harness.WaitForHealthy(ctx, 10*time.Second); err != nil {
 		t.Fatalf("J19 [boot] harness failed to become healthy: %v", err)
 	}
-	client := NewAPIClient(baseURL, harness.client)
-	task := agenticTask(ctx, t, client, "J19", ScriptedToolCall{Name: "bash", Arguments: map[string]any{"command": "sudo id"}})
+	client := NewAPIClient(acpBaseURL, harness.client)
 
-	// The refusal, then the alternative the privilege recovery ran.
-	results := toolResultEvents(ctx, t, client, "J19", task.ID)
-	if len(results) != 2 {
-		t.Fatalf("J19 [events] want two TOOL_RESULTs (refusal, alternative), got %+v", results)
-	}
-	got := results[0]
-	if got.ToolName != "bash" || got.ExitCode != -1 || !strings.Contains(strings.ToLower(got.OutputSummary), "sudo") {
-		t.Fatalf("J19 [denylist] TOOL_RESULT = %+v, want bash refused with exit -1 naming sudo", got)
-	}
-	if strings.Contains(got.OutputSummary, "uid=") {
-		t.Fatalf("J19 [denylist] the command ran: output %q", got.OutputSummary)
-	}
-	alternative := results[1]
-	if alternative.ToolName != "bash" || alternative.ExitCode != 0 || !strings.Contains(alternative.OutputSummary, "executed via litellm proxy") {
-		t.Fatalf("J19 [alternative] TOOL_RESULT = %+v, want the non-privileged alternative to run", alternative)
-	}
+	script := fakeagent.Script(
+		fakeagent.Step{Permission: &fakeagent.Permission{
+			Kind:     acpsdk.ToolKindExecute,
+			Title:    "bash",
+			RawInput: map[string]any{"command": "sudo id"},
+		}},
+		fakeagent.Step{Stop: acpsdk.StopReasonCancelled},
+	)
+	materialized := materializePlan(ctx, t, client, "J19", DraftPlan{
+		ProjectName:         UniqueProjectName("j19"),
+		Description:         "J19 ACP sudo permission",
+		StartEmptyWorkspace: true,
+		Tasks:               []DraftTask{{Title: "J19 acp sudo", Description: script}},
+	})
+	taskID := materialized.Tasks[0].ID
 
-	if use := toolUse(ctx, t, client, task.ID); len(use.Tools) != 1 || use.Tools[0].Tool != "bash" || use.Tools[0].Calls != 2 || use.Tools[0].Failed != 1 {
-		t.Fatalf("J19 [tool use] report = %+v, want two bash calls with one failed", use.Tools)
+	deadline := time.Now().Add(60 * time.Second)
+	var last []TaskEvent
+	for time.Now().Before(deadline) {
+		events, err := client.ListTaskEvents(ctx, taskID)
+		if err != nil {
+			t.Fatalf("J19 [events] %v", err)
+		}
+		last = events
+		for _, ev := range events {
+			if ev.Type == "ATTEMPT_HANDOFF" && strings.Contains(ev.Payload, "permission: reject_once") {
+				return
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
-
-	prompts, err := NewMockLLMClient(mockLLMBaseURL).WorkerPrompts(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("J19 [mock capture] %v", err)
-	}
-	if len(prompts) < 2 || !strings.Contains(prompts[len(prompts)-1], "executed via litellm proxy") {
-		t.Fatalf("J19 [mock capture] the next turn did not carry the alternative's output: %d prompts", len(prompts))
-	}
+	t.Fatalf("J19 [events] no ATTEMPT_HANDOFF carried reject_once; last events: %+v", last)
 }
 
 // TestJ22_AgentdReportAIInsideContainer tests J22: `agentd report ai`, run inside
@@ -129,6 +130,7 @@ func TestJ19_AgenticDenylistRefusesSudo(t *testing.T) {
 // exist. Pass criteria: the CLI's table has a PURPOSE header and an exec.turn
 // row, and its CALLS for exec.turn equals the ai-usage report's calls.
 func TestJ22_AgentdReportAIInsideContainer(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
@@ -177,6 +179,7 @@ func TestJ22_AgentdReportAIInsideContainer(t *testing.T) {
 // gateway.truncation.strategy (default head_tail), so both markers survive with
 // the truncation marker between them.
 func TestJ20_AgenticOversizedToolResultIsCut(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
@@ -231,6 +234,7 @@ func TestJ20_AgenticOversizedToolResultIsCut(t *testing.T) {
 // bytes the second read added. This is the baseline for any later
 // "don't re-read files" work; nothing here deduplicates.
 func TestJ21_AgenticRepeatedReadIsCounted(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}

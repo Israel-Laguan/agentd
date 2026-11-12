@@ -14,6 +14,7 @@ import (
 	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/gateway/spec"
 	agentmcp "agentd/internal/mcp"
+	"agentd/internal/models"
 	"agentd/internal/sandbox/egress"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
@@ -172,6 +173,29 @@ func TestACPAgentUnevidencedCompletionOfAFlaggedTaskIsUnverified(t *testing.T) {
 	}
 	if res, err := runACPStage(t, fakeACPAgentFor(t, nil, stage.AccessReadOnly), stage.AccessReadOnly, true, validReport); err != nil || res.Outcome != stage.OutcomeCompleted {
 		t.Fatalf("read-only flagged: result = %q, %v; want completed without evidence", res.Outcome, err)
+	}
+}
+
+// The real ACPPermitter refuses a sudo command through the whole ACP driver:
+// the agent sees reject_once, not allow_once, and the turn ends on that refusal.
+func TestACPAgentRefusesSudoThroughTheRealPermitter(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{ProjectName: "p", Tasks: []models.DraftTask{{Title: "sudo", Description: "d"}}})
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	w := NewWorker(store, nil, &batchCountingSandbox{}, nil, &mockEventSink{}, WorkerOptions{})
+	taskHooks, _ := w.MountAgenticHooks(models.Project{}, models.AgentProfile{})
+	a := fakeACPAgent(t, ACPPermitter(tasks[0], taskHooks, w.hooks))
+	res, err := runACPStage(t, a, stage.AccessWrite, false,
+		fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindExecute, RawInput: map[string]any{"command": "sudo id"}}},
+		fakeagent.Step{Stop: acpsdk.StopReasonCancelled})
+	if !errors.Is(err, acp.ErrPermissionRefused) {
+		t.Fatalf("err = %v, want ErrPermissionRefused", err)
+	}
+	if !strings.Contains(res.Progress, "permission: reject_once") {
+		t.Fatalf("progress = %q, want the agent to see reject_once", res.Progress)
 	}
 }
 

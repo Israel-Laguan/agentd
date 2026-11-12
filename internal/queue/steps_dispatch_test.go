@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
@@ -13,12 +14,23 @@ import (
 
 func (s *queueScenario) maxWorkersLimit(_ context.Context, limit int) error {
 	s.sandbox = newBlockingQueueSandbox()
+	s.useACP = true
+	// The task runs on an agent, and the pre-task clarify still makes an L1
+	// call; give it a gateway that answers without clarifying.
+	s.acpGateway = &fakeGateway{}
 	s.rebuild(limit)
 	return nil
 }
 
 func (s *queueScenario) readyTasks(_ context.Context, count int) error {
 	s.store.seed(count, models.TaskStateReady)
+	if s.useACP {
+		// A task holds its slot while its agent is in the turn, which is what
+		// the concurrency cap has to hold down.
+		for i := range s.store.tasks {
+			s.store.tasks[i].Title = fakeagent.Script(fakeagent.Step{SleepMS: 60_000})
+		}
+	}
 	return nil
 }
 
@@ -57,6 +69,20 @@ func (s *queueScenario) oneWorkerFinishes(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("no active task found")
 	}
+	// The task holds its slot while its agent is in the turn. Cancel the real
+	// turn and wait for the worker to release the slot itself, so the next tick
+	// cannot exceed the active-worker limit behind a still-running agent.
+	if s.useACP {
+		// The turn registers its cancel after MarkTaskRunning, so poll until a
+		// RUNNING task has one.
+		if err := waitFor(func() bool {
+			running, ok := s.store.first(models.TaskStateRunning)
+			return ok && s.canceller.Cancel(running.ID)
+		}, "an in-flight agent turn to finish"); err != nil {
+			return err
+		}
+		return waitFor(func() bool { return s.daemon.sem.Available() > 0 }, "the finished worker to release its slot")
+	}
 	if _, err := s.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{Success: true}); err != nil {
 		return err
 	}
@@ -76,54 +102,6 @@ func (s *queueScenario) breakerClosed(context.Context) error {
 	return nil
 }
 
-func (s *queueScenario) gatewayUnreachable(context.Context) error {
-	s.gateway.err = models.ErrLLMUnreachable
-	s.rebuild(3)
-	return nil
-}
-
-func (s *queueScenario) threeWorkersFailOutage(ctx context.Context) error {
-	s.store.seed(3, models.TaskStateReady)
-	_, _, err := s.daemon.dispatch(ctx)
-	if err != nil {
-		return err
-	}
-	return waitFor(func() bool { return s.daemon.sem.InUse() == 0 }, "outage workers finished")
-}
-
-func (s *queueScenario) breakerShouldBeOpen(context.Context) error {
-	return waitFor(func() bool { return s.breaker.State() == BreakerOpen }, "breaker OPEN")
-}
-
-func (s *queueScenario) outageTasksReadyThenHumanHandoff(context.Context) error {
-	return waitFor(func() bool { return s.outageHandoffSettled() }, "outage handoff settlement")
-}
-
-func (s *queueScenario) outageHandoffSettled() bool {
-	tasks, _ := s.store.ListTasksByProject(context.Background(), "project")
-	ready := 0
-	blocked := 0
-	for _, task := range tasks {
-		if task.RetryCount != 0 {
-			return false
-		}
-		switch task.State {
-		case models.TaskStateReady:
-			ready++
-		case models.TaskStateBlocked:
-			blocked++
-		default:
-			return false
-		}
-	}
-	return ready == 2 && blocked == 1 && s.sink.containsType("PROVIDER_EXHAUSTED_HANDOFF")
-}
-
-func (s *queueScenario) daemonPausesPolling(ctx context.Context) error {
-	s.store.seed(1, models.TaskStateReady)
-	return s.nextTickIgnores(ctx, 1)
-}
-
 func (s *queueScenario) breakerOpen(context.Context) error {
 	s.breaker.ForceStateForTest(BreakerOpen, s.now)
 	return nil
@@ -132,7 +110,11 @@ func (s *queueScenario) breakerOpen(context.Context) error {
 func (s *queueScenario) breakerTimeoutElapsed(context.Context) error {
 	s.now = s.now.Add(DefaultBreakerTimeout + time.Second)
 	s.store.seed(3, models.TaskStateReady)
-	s.sandbox = newBlockingQueueSandbox()
+	s.useACP = true
+	s.acpGateway = &fakeGateway{}
+	for i := range s.store.tasks {
+		s.store.tasks[i].Title = fakeagent.Script(fakeagent.Step{Message: "checking"}, fakeagent.Step{SleepMS: 300}, acpReport("probe ok"))
+	}
 	s.rebuild(3)
 	return nil
 }
@@ -154,9 +136,6 @@ func (s *queueScenario) testTaskSucceeds(_ context.Context) error {
 	}, "probe task running"); err != nil {
 		return err
 	}
-	if s.sandbox != nil {
-		s.sandbox.unblockProbe()
-	}
 	return waitFor(func() bool {
 		return s.store.count(models.TaskStateCompleted) >= 1 && s.daemon.sem.InUse() == 0
 	}, "probe task completed")
@@ -164,6 +143,15 @@ func (s *queueScenario) testTaskSucceeds(_ context.Context) error {
 
 func (s *queueScenario) breakerShouldBeClosed(context.Context) error {
 	return requireBreakerState(s.breaker, BreakerClosed)
+}
+
+// An ACP task completes without a provider request, so it must not be read as
+// recovery: the breaker stays HALF_OPEN and keeps admitting one probe at a time.
+func (s *queueScenario) breakerShouldNotClose(context.Context) error {
+	if state := s.breaker.State(); state == BreakerClosed {
+		return fmt.Errorf("breaker state = %s, want it to stay HALF_OPEN without a provider request", state)
+	}
+	return nil
 }
 
 func (s *queueScenario) normalPollingResumes(ctx context.Context) error {
@@ -196,7 +184,6 @@ func newBlockingQueueSandbox() *queueSandbox {
 		blockOnCtx: true,
 		started:    make(chan struct{}),
 		cancelled:  make(chan struct{}),
-		unblock:    make(chan struct{}),
 	}
 }
 

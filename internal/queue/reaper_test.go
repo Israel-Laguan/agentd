@@ -5,24 +5,26 @@ import (
 	"testing"
 	"time"
 
-	"agentd/internal/gateway"
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
 )
 
+// The reaper cancels a task that outruns its deadline. What it cancels now is an
+// agent: the worker's run context reaches the agent process, which the runtime's
+// cancellation hook sees.
 func TestReaperCancelsWorkerAfterDeadline(t *testing.T) {
 	store := newQueueStore()
 	store.seed(1, models.TaskStateReady)
-
-	sb := &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
-	gw := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "sleep 999")}}
-	breaker := NewCircuitBreaker()
+	store.tasks[0].Title = fakeagent.Script(fakeagent.Step{SleepMS: 60_000})
+	started, stopped := make(chan struct{}), make(chan struct{})
+	acp, closeACP := newObservedACPRuntime(started, stopped)
+	t.Cleanup(closeACP)
 	sink := &queueSink{}
-	worker := NewWorker(store, gw, sb, breaker, sink, WorkerOptions{})
+	worker := NewWorker(store, &fakeGateway{}, nil, NewCircuitBreaker(), sink,
+		WorkerOptions{Routes: acpQueueRoutes(), ACP: acp})
 
 	deadline := 200 * time.Millisecond
-	daemon := NewDaemon(store, worker, nil, breaker, sink, DaemonOptions{
+	daemon := NewDaemon(store, worker, nil, NewCircuitBreaker(), sink, DaemonOptions{
 		MaxWorkers: 1, TaskInterval: time.Hour, TaskDeadline: deadline,
 		Probe: StaticPIDProbe{},
 	})
@@ -36,15 +38,15 @@ func TestReaperCancelsWorkerAfterDeadline(t *testing.T) {
 	}
 
 	select {
-	case <-sb.started:
+	case <-started:
 	case <-time.After(2 * time.Second):
-		t.Fatal("sandbox did not start")
+		t.Fatal("the agent did not start")
 	}
 
 	select {
-	case <-sb.cancelled:
+	case <-stopped:
 	case <-time.After(deadline + 2*time.Second):
-		t.Fatal("sandbox was not cancelled by reaper deadline")
+		t.Fatal("the agent process was not cancelled by the reaper deadline")
 	}
 
 	waitSemaphore(t, daemon.sem, 1, 5*time.Second)
@@ -53,14 +55,14 @@ func TestReaperCancelsWorkerAfterDeadline(t *testing.T) {
 func TestReaperDoesNotCancelFastWorker(t *testing.T) {
 	store := newQueueStore()
 	store.seed(1, models.TaskStateReady)
-
-	gw := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
-	sb := &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
-	breaker := NewCircuitBreaker()
+	store.tasks[0].Title = fakeagent.Script(acpReport("done"))
+	acp, closeACP := newACPRuntime()
+	t.Cleanup(closeACP)
 	sink := &queueSink{}
-	worker := NewWorker(store, gw, sb, breaker, sink, WorkerOptions{})
+	worker := NewWorker(store, &fakeGateway{}, nil, NewCircuitBreaker(), sink,
+		WorkerOptions{Routes: acpQueueRoutes(), ACP: acp})
 
-	daemon := NewDaemon(store, worker, nil, breaker, sink, DaemonOptions{
+	daemon := NewDaemon(store, worker, nil, NewCircuitBreaker(), sink, DaemonOptions{
 		MaxWorkers: 1, TaskInterval: time.Hour, TaskDeadline: time.Minute,
 		Probe: StaticPIDProbe{},
 	})

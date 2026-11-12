@@ -36,15 +36,29 @@ func resolverCases(store *testutil.FakeKanbanStore) []resolverCase {
 			name:    "review",
 			worker:  &Worker{store: store},
 			profile: models.AgentProfile{RequireReview: true},
-			want:    executionAgentReview,
+			want:    executionAgentMissingRoute,
 		},
 		{
-			name: "rollup",
-			worker: &Worker{store: &resolverRollupStore{
-				FakeKanbanStore: store,
-				comments:        []models.Comment{breakdownMarker(1)},
-			}},
-			want: executionAgentRollup,
+			name:   "rollup",
+			worker: &Worker{store: &resolverRollupStore{FakeKanbanStore: store, comments: []models.Comment{breakdownMarker(1)}}},
+			want:   executionAgentRollup,
+		},
+		{
+			// A review-required task must not take the roll-up shortcut: the
+			// roll-up commits the parent directly, with no review handoff.
+			name:    "review required skips rollup",
+			worker:  &Worker{store: &resolverRollupStore{FakeKanbanStore: store, comments: []models.Comment{breakdownMarker(1)}}},
+			profile: models.AgentProfile{RequireReview: true},
+			want:    executionAgentMissingRoute,
+		},
+		{
+			// Phase planning is a builtin step, not an exec turn, so a
+			// review-required profile keeps it instead of routing it to ACP.
+			name:    "review required keeps phase planning",
+			worker:  &Worker{store: store},
+			task:    models.Task{Title: "plan phase 2"},
+			profile: models.AgentProfile{RequireReview: true},
+			want:    executionAgentPhasePlanning,
 		},
 		{
 			name:   "phase planning",
@@ -56,13 +70,13 @@ func resolverCases(store *testutil.FakeKanbanStore) []resolverCase {
 			name:   "tiered origin",
 			worker: &Worker{store: store, tieredCfg: config.TieredConfig{Enabled: true, ComplexityThreshold: 1}},
 			task:   models.Task{Title: "implement a complex integration with many services and detailed validation requirements", Description: "configure the api database cache queue and deployment pipeline including tests and documentation"},
-			want:   executionAgentTieredOrigin,
+			want:   executionAgentMissingRoute,
 		},
 		{
 			name:   "tiered step",
 			worker: &Worker{store: store},
 			task:   models.Task{AgentID: "tier-execute"},
-			want:   executionAgentTieredStep,
+			want:   executionAgentMissingRoute,
 		},
 		{
 			name:   "host report",
@@ -74,7 +88,7 @@ func resolverCases(store *testutil.FakeKanbanStore) []resolverCase {
 			name:   "agentic",
 			worker: &Worker{store: store},
 			task:   models.Task{Title: "simple task"},
-			want:   executionAgentAgentic,
+			want:   executionAgentMissingRoute,
 		},
 	}
 }

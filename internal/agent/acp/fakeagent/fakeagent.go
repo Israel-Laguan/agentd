@@ -21,13 +21,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	acp "github.com/coder/acp-go-sdk"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // maxSleepMS caps a sleep step (one hour), so the millisecond conversion cannot overflow.
@@ -179,7 +177,7 @@ func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.
 	case step.Cancels:
 		return "", a.say(ctx, session, fmt.Sprintf("cancels: %d", a.cancels.Load()))
 	case step.Permission != nil:
-		return "", a.ask(ctx, session, *step.Permission)
+		return a.ask(ctx, session, *step.Permission)
 	case step.Tool != nil:
 		return "", a.callTool(ctx, session, *step.Tool)
 	case step.Did != "":
@@ -202,10 +200,35 @@ func (a *agent) say(ctx context.Context, session acp.SessionId, text string) err
 
 // ask offers cline's options, but with allow_always first, so a client that
 // takes the first option grants every later call too.
-func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) error {
+func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) (acp.StopReason, error) {
+	id := acp.ToolCallId(fmt.Sprintf("call-%d", a.calls.Add(1)))
+	if p.CallID != "" {
+		// Name the call in its start, then ask permission for it with the title
+		// only: the driver must merge the recorded kind (ToolCallUpdate.Kind is
+		// optional, so the request carries none).
+		id = acp.ToolCallId(p.CallID)
+		start := acp.StartToolCall(id, p.Title, acp.WithStartKind(p.Kind), acp.WithStartStatus(acp.ToolCallStatusPending))
+		if err := a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionId: session, Update: start}); err != nil {
+			return "", err
+		}
+		// shortcut: the SDK handles a notification and the next request concurrently, so wait for the start to be recorded; a real agent can race the same way.
+		select {
+		case <-time.After(50 * time.Millisecond):
+		case <-ctx.Done():
+			a.cancels.Add(1)
+			return acp.StopReasonCancelled, nil
+		}
+	}
+	// A permission request carries the kind only when the agent names it; the
+	// driver merges the recorded kind otherwise (ToolCallUpdate.Kind is
+	// optional).
+	toolCall := acp.ToolCallUpdate{ToolCallId: id, Title: acp.Ptr(p.Title), RawInput: p.RawInput}
+	if p.Kind != "" && p.CallID == "" {
+		toolCall.Kind = acp.Ptr(p.Kind)
+	}
 	resp, err := a.conn.RequestPermission(ctx, acp.RequestPermissionRequest{
 		SessionId: session,
-		ToolCall:  acp.ToolCallUpdate{ToolCallId: acp.ToolCallId(fmt.Sprintf("call-%d", a.calls.Add(1))), Kind: acp.Ptr(p.Kind), Title: acp.Ptr(p.Title), RawInput: p.RawInput},
+		ToolCall:  toolCall,
 		Options: []acp.PermissionOption{
 			{OptionId: "allow_always", Name: "Allow always", Kind: acp.PermissionOptionKindAllowAlways},
 			{OptionId: "allow_once", Name: "Allow once", Kind: acp.PermissionOptionKindAllowOnce},
@@ -213,40 +236,13 @@ func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) er
 		},
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	answer := "cancelled"
 	if resp.Outcome.Selected != nil {
 		answer = string(resp.Outcome.Selected.OptionId)
 	}
-	return a.say(ctx, session, "permission: "+answer)
-}
-
-func (a *agent) callTool(ctx context.Context, session acp.SessionId, t Tool) error {
-	a.mu.Lock()
-	url := a.mcp[session]
-	a.mu.Unlock()
-	client := mcp.NewClient(&mcp.Implementation{Name: "fakeagent", Version: "0"}, nil)
-	cs, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: url}, nil)
-	if err != nil {
-		return a.say(ctx, session, "tool error: "+err.Error())
-	}
-	defer func() { _ = cs.Close() }()
-	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: t.Name, Arguments: t.Args})
-	if err != nil {
-		return a.say(ctx, session, "tool error: "+err.Error())
-	}
-	var text []string
-	for _, c := range res.Content {
-		if tc, ok := c.(*mcp.TextContent); ok {
-			text = append(text, tc.Text)
-		}
-	}
-	prefix := "tool: "
-	if res.IsError {
-		prefix = "tool error: "
-	}
-	return a.say(ctx, session, prefix+strings.Join(text, "\n"))
+	return "", a.say(ctx, session, "permission: "+answer)
 }
 
 // did reports a tool call as agents do: started pending, then completed.

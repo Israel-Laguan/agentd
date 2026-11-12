@@ -88,8 +88,14 @@ func opencodeHome(l Launch) ([]string, error) {
 		"OPENCODE_DISABLE_AUTOUPDATE=1", "OPENCODE_DISABLE_MODELS_FETCH=1", l.Executable, "acp"}, nil
 }
 
-// clineProvider is the one login cline gets: its own, whose hosts Allow lists.
-const clineProvider = "cline"
+// clineProvider is the login cline gets: its own, whose hosts Allow lists.
+// clinePassProvider is ClinePass on the same hosts and auth storage; when the
+// user has it, it is used, since the usage-billed login refuses even free
+// models once its credit balance is negative (SP-029).
+const (
+	clineProvider     = "cline"
+	clinePassProvider = "cline-pass"
+)
 
 // clineRules makes cline ask instead of guessing: without it 6 of 10 runs of
 // an ambiguous task reported Completed; with it, 0 of 10 (SP-026).
@@ -97,11 +103,12 @@ const clineRules = "# agentd\n\nNever guess a detail the task does not give you.
 	"call the ask_human tool from the agentd MCP server and end your turn without changing any file.\n"
 
 // clineHome writes cline's config dir: the user's providers file cut to the
-// one provider, agentd's MCP server (cline ignores session/new's), and the
-// rules. The file's other fields stay as written: cline drops a file that
-// fails its schema and then sees no login. The model is CLINE_MODEL, since
-// the session ignores the file's (it ran cline's paid default).
-// Cline's hub daemon starts inside the jail and dies with its PID namespace.
+// `cline` provider, plus `cline-pass` when the user has it, agentd's MCP server
+// (cline ignores session/new's), and the rules. The file's other fields stay as
+// written: cline drops a file that fails its schema and then sees no login. The
+// model is CLINE_MODEL, since the session ignores the file's (it ran cline's
+// paid default). Cline's hub daemon starts inside the jail and dies with its PID
+// namespace.
 // shortcut: cline may refresh its token into the run's copy, which is then dropped; write it back if a rotated token ever breaks the user's login.
 func clineHome(l Launch) ([]string, error) {
 	if l.MCPURL == "" {
@@ -113,12 +120,22 @@ func clineHome(l Launch) ([]string, error) {
 	}
 	var providers map[string]json.RawMessage
 	_ = json.Unmarshal(file["providers"], &providers) // a missing or odd field leaves no login
-	login, ok := providers[clineProvider]
-	if !ok {
+	login, hasLogin := providers[clineProvider]
+	pass, hasPass := providers[clinePassProvider]
+	if !hasLogin && !hasPass {
 		return nil, fmt.Errorf("acp: %s has no login for provider %q", l.Credentials, clineProvider)
 	}
-	file["providers"], _ = json.Marshal(map[string]json.RawMessage{clineProvider: login})
-	file["lastUsedProvider"], _ = json.Marshal(clineProvider)
+	// ClinePass can be the only login: cline reads it from the same providers
+	// file and the same auth storage as its own. Keep whichever entries exist.
+	keep, last := map[string]json.RawMessage{}, clineProvider
+	if hasLogin {
+		keep[clineProvider] = login
+	}
+	if hasPass {
+		keep[clinePassProvider], last = pass, clinePassProvider
+	}
+	file["providers"], _ = json.Marshal(keep)
+	file["lastUsedProvider"], _ = json.Marshal(last)
 	config := filepath.Join(l.Home, ".cline")
 	mcp := filepath.Join(config, "data/settings/cline_mcp_settings.json")
 	writes := []struct {
@@ -139,7 +156,9 @@ func clineHome(l Launch) ([]string, error) {
 	if err := writeHomeFile(l.Home, ".cline/rules/agentd.md", []byte(clineRules)); err != nil {
 		return nil, err
 	}
-	return []string{"env", "CLINE_MCP_SETTINGS_PATH=" + mcp, "CLINE_MODEL=" + l.Model, "CLINE_NO_AUTO_UPDATE=1",
+	// ACP sessions take the provider from CLINE_PROVIDER, not lastUsedProvider,
+	// and fall back to the provider's default model for an id it does not list.
+	return []string{"env", "CLINE_MCP_SETTINGS_PATH=" + mcp, "CLINE_PROVIDER=" + last, "CLINE_MODEL=" + l.Model, "CLINE_NO_AUTO_UPDATE=1",
 		l.Executable, "--acp", "--config", config}, nil
 }
 

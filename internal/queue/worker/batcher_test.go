@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"agentd/internal/config"
+	"agentd/internal/gateway/route"
 	"agentd/internal/models"
 )
 
@@ -46,6 +47,34 @@ func TestTaskBatcher_Group_SameProjectAgent(t *testing.T) {
 	}
 	if len(batches[0].Tasks) != 3 {
 		t.Fatalf("batch tasks = %d, want 3", len(batches[0].Tasks))
+	}
+}
+
+func TestTaskBatcher_Group_ACPExecTurnNotBatched(t *testing.T) {
+	t.Parallel()
+	store := &batchTestStore{
+		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp"},
+		profile: models.AgentProfile{ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: true},
+	}
+	w := NewWorker(store, nil, nil, nil, nil, WorkerOptions{
+		Batching:     config.BatchingConfig{Enabled: true, MaxBatchSize: 5},
+		Routes:       acpRoutes(),
+		ToolManifest: config.ToolManifestConfig{Enabled: true, MinConfidence: 0.35},
+	})
+	// These route exec.turn to the ACP coder, so each must be its own batch:
+	// a shared batch runs them serially under one task_deadline.
+	tasks := []models.Task{
+		{BaseEntity: models.BaseEntity{ID: "t1"}, ProjectID: "p1", AgentID: route.DefaultAgentID, Title: "Task A", Description: "condense"},
+		{BaseEntity: models.BaseEntity{ID: "t2"}, ProjectID: "p1", AgentID: route.DefaultAgentID, Title: "Task B", Description: "condense"},
+	}
+	batches := w.GroupClaimed(context.Background(), tasks)
+	if len(batches) != 2 {
+		t.Fatalf("batches len = %d, want 2 (ACP tasks are never batched)", len(batches))
+	}
+	for _, b := range batches {
+		if len(b.Tasks) != 1 {
+			t.Fatalf("expected singleton batch, got %d tasks", len(b.Tasks))
+		}
 	}
 }
 

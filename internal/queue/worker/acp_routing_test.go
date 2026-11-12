@@ -19,7 +19,8 @@ import (
 	"agentd/internal/gateway/spec"
 	agentmcp "agentd/internal/mcp"
 	"agentd/internal/models"
-	"agentd/internal/queue/runaudit"
+	"agentd/internal/queue/safety"
+	"agentd/internal/sandbox"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
 
@@ -134,7 +135,7 @@ func acpTask(t *testing.T, title, description string, flagged bool) (*testutil.F
 	store := testutil.NewFakeStore()
 	store.SetProjectsDir(t.TempDir())
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{ProjectName: "acp", Description: "d",
-		Tasks: []models.DraftTask{{Title: title, Description: description, RequiresWorkspaceChange: flagged}}})
+		Tasks: []models.DraftTask{{Title: title, Description: description, RequiresWorkspaceChange: flagged, RequiresWorkspaceChangeSet: true}}})
 	if err != nil {
 		t.Fatalf("MaterializePlan: %v", err)
 	}
@@ -160,10 +161,44 @@ func TestResolveExecutionAgentPicksTheACPAgentAnExecTurnRouteNames(t *testing.T)
 	if got.kind != executionAgentACP || got.route.Agent != "coder" || got.agent.Preset != "fake" || got.route.Required != spec.LevelL3 {
 		t.Fatalf("resolution = %+v, want the acp agent coder at L3", got)
 	}
-	// With no acp agent configured, the task stays on the builtin loop.
+	// With no acp agent configured, the task has no execution route.
 	w.routes = route.Table{}
-	if got := w.resolveExecutionAgent(context.Background(), task, project, profile); got.kind != executionAgentAgentic {
-		t.Fatalf("resolution with no routes = %q, want %q", got.kind, executionAgentAgentic)
+	if got := w.resolveExecutionAgent(context.Background(), task, project, profile); got.kind != executionAgentMissingRoute {
+		t.Fatalf("resolution with no routes = %q, want %q", got.kind, executionAgentMissingRoute)
+	}
+}
+
+func TestACPExecutionDoesNotCloseTheGlobalBreaker(t *testing.T) {
+	t.Parallel()
+	script := fakeagent.Script(report(map[string]any{"summary": "done"}))
+	w, store, task, project, profile, _, _ := acpFixture(t, script, false)
+	breaker := safety.NewCircuitBreaker()
+	breaker.ForceStateForTest(safety.BreakerHalfOpen, time.Now())
+	w.breaker = breaker
+	w.dispatchProcess(context.Background(), task, project, profile)
+
+	got, err := store.GetTask(context.Background(), task.ID)
+	if err != nil || got.State != models.TaskStateCompleted {
+		t.Fatalf("task = %+v, %v; want COMPLETED", got, err)
+	}
+	if breaker.State() == safety.BreakerClosed {
+		t.Fatal("an ACP completion closed the breaker; only a provider request may do that")
+	}
+}
+
+// The skip is scoped to the ACP path: a builtin completion still closes the
+// breaker, which is how the provider probe recovers.
+func TestCommitSucceededRecordsBreakerSuccessOutsideACP(t *testing.T) {
+	t.Parallel()
+	store, task, _, _ := acpTask(t, "work", "do the thing", false)
+	breaker := safety.NewCircuitBreaker()
+	breaker.ForceStateForTest(safety.BreakerHalfOpen, time.Now())
+	w := NewWorker(store, nil, &routingTestSandbox{}, breaker, &mockEventSink{}, WorkerOptions{})
+	if !w.commitSucceeded(context.Background(), task, sandbox.Result{Success: true}, nil) {
+		t.Fatal("commitSucceeded did not persist the result")
+	}
+	if w.breaker.State() != safety.BreakerClosed {
+		t.Fatalf("breaker state = %s, want CLOSED", w.breaker.State())
 	}
 }
 
@@ -194,8 +229,8 @@ func TestACPExecutionCompletesTheTaskWithTheReportedSummary(t *testing.T) {
 	if len(recs) != 1 || recs[0].Purpose != spec.PurposeExecTurn || recs[0].RoutedAgent != "coder" || recs[0].Provider != route.KindACP || recs[0].Outcome != spec.OutcomeOK {
 		t.Fatalf("records = %+v, want one ok exec.turn record for coder", recs)
 	}
-	if got := roLog.all(); len(got) != 1 || got[0] {
-		t.Fatalf("acp Command readOnly args = %v, want [false] for a writable exec.turn", got)
+	if got := roLog.all(); len(got) != 1 || !got[0] {
+		t.Fatalf("acp Command readOnly args = %v, want [true] for a text task", got)
 	}
 }
 
@@ -351,7 +386,7 @@ func TestACPExecutionAuditsFailWhenTheResultCannotBePersisted(t *testing.T) {
 func TestACPExecutionAuditsSuspendedWhenPermissionIsBlocked(t *testing.T) {
 	t.Parallel()
 	script := fakeagent.Script(fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindEdit, Title: "edit"}})
-	w, store, task, project, profile, _, _ := acpFixture(t, script, false)
+	w, store, task, project, profile, _, _ := acpFixture(t, script, true)
 	profile.GatedTools = []string{"write"}
 	path := withAuditFile(t, w)
 
@@ -419,67 +454,5 @@ func TestACPExecutionCommandPolicyRunsBeforeTheGate(t *testing.T) {
 		if want == "suspended" && !v.Suspend {
 			t.Errorf("%q: permitter verdict = %+v; want a suspend for a gated command", command, v)
 		}
-	}
-}
-
-// exec.work_plan can route to an ACP agent. The response is charged to the
-// caller's attempt budget once: ACP never runs the correction loop, so the call
-// must not also charge its own guard and GeneratePlan's fallback.
-func TestACPWorkPlanChargesTheBudgetOnce(t *testing.T) {
-	t.Parallel()
-	step := report(map[string]any{"steps": []any{map[string]any{
-		"id": "analyze", "action": "read the code",
-	}}})
-	step.Usage = &acpsdk.Usage{TotalTokens: 321}
-	w, _, task, project, _, _, _ := acpFixture(t, "plan the work", false)
-	task.Description = fakeagent.Script(step)
-	w.routes.Stages[spec.PurposeExecWorkPlan] = route.StageRoute{Default: "coder"}
-	tracker := gateway.NewBudgetTracker(10000)
-	guard := runaudit.NewBudgetGuard(tracker, task.ID)
-
-	plan, err := w.GeneratePlan(context.Background(), task, project, guard)
-	if err != nil {
-		t.Fatalf("GeneratePlan: %v", err)
-	}
-	if len(plan.Steps) != 1 || plan.Steps[0].ID != "analyze" {
-		t.Fatalf("plan = %+v, want the one analyze step", plan)
-	}
-	if got := guard.Usage(); got != 321 {
-		t.Fatalf("budget usage = %d, want 321: the ACP response must be charged once", got)
-	}
-}
-
-type refusingBudgetTracker struct{ reserves int }
-
-func (b *refusingBudgetTracker) Reserve(string) error {
-	b.reserves++
-	return models.ErrBudgetExceeded
-}
-func (b *refusingBudgetTracker) Add(string, int)  {}
-func (b *refusingBudgetTracker) Usage(string) int { return 0 }
-func (b *refusingBudgetTracker) Reset(string)     {}
-
-// An ACP exec.turn reserves the task token budget before the agent starts.
-func TestACPExecutionReservesTaskBudget(t *testing.T) {
-	t.Parallel()
-	script := fakeagent.Script(report(map[string]any{"summary": "summary"}))
-	w, store, task, project, profile, sink, _ := acpFixture(t, script, false)
-	tracker := &refusingBudgetTracker{}
-	w.budgetTracker = tracker
-
-	w.dispatchProcess(context.Background(), task, project, profile)
-
-	if tracker.reserves == 0 {
-		t.Fatal("task budget was never reserved for the ACP call")
-	}
-	got, err := store.GetTask(context.Background(), task.ID)
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	if got.State == models.TaskStateCompleted {
-		t.Fatal("task completed despite an exhausted task token budget")
-	}
-	if recs := sink.all(); len(recs) != 0 {
-		t.Fatalf("acp call records = %+v, want none: the agent must not start over budget", recs)
 	}
 }

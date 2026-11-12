@@ -3,93 +3,42 @@ package worker
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
-	"agentd/internal/config"
-	"agentd/internal/gateway"
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
-	"agentd/internal/queue/planning"
-	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
 
 const breakdownMarkerTitle = "AGENT_PLAN"
 
-// titleBreakdownGateway decomposes any task whose prompt carries
-// breakdownMarkerTitle. The agentic path reaches the healing split through a
-// failing tool call, so the marked task's first turn runs a command that fails,
-// and the split call returns the subtasks. Other tasks run one command and finish.
-type titleBreakdownGateway struct {
-	routingTestGateway
-	split bool
-}
-
-func lastMessageIsToolResult(req gateway.AIRequest) bool {
-	return len(req.Messages) > 0 && req.Messages[len(req.Messages)-1].Role == "tool"
-}
-
-func (g *titleBreakdownGateway) ProviderSupportsChatTools(provider string) bool {
-	return testutil.ProviderSupportsChatTools(provider)
-}
-
-// breakdownSandbox fails the command the marked task runs, so its failing tool
-// call reaches the healing split. Every other command succeeds.
-type breakdownSandbox struct {
-	routingTestSandbox
-}
-
-func (s *breakdownSandbox) Execute(ctx context.Context, p sandbox.Payload) (sandbox.Result, error) {
-	if p.Command == "false" {
-		s.execCount++
-		return sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}, nil
-	}
-	return s.routingTestSandbox.Execute(ctx, p)
-}
-
-func (g *titleBreakdownGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
-	g.requests = append(g.requests, req)
-	if req.Purpose == gateway.PurposeCreateElicit {
-		return gateway.AIResponse{Content: `{"needs_clarification":false}`}, nil
-	}
-	if req.Purpose == gateway.PurposeCreateSplitTask {
-		g.split = true
-		return gateway.AIResponse{Content: `{"subtasks":[` +
-			`{"title":"Step 1","description":"scaffold"},{"title":"Step 2","description":"implement"}]}`}, nil
-	}
-	if lastMessageIsToolResult(req) {
-		return gateway.AIResponse{Content: "done"}, nil
-	}
-	for _, m := range req.Messages {
-		if m.Role == "user" && strings.Contains(m.Content, breakdownMarkerTitle) {
-			if g.split {
-				// A resumed parent answers in one turn: the split already ran.
-				return gateway.AIResponse{Content: "done"}, nil
-			}
-			return gateway.AIResponse{ToolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}, nil
-		}
-	}
-	return gateway.AIResponse{ToolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}, nil
-}
-
-func newBreakdownRollupFixture(t *testing.T) (*testutil.FakeKanbanStore, *titleBreakdownGateway, *Worker, models.Task) {
+func newBreakdownRollupFixture(t *testing.T) (*testutil.FakeKanbanStore, *acpReadOnlyLog, *Worker, models.Task) {
 	t.Helper()
+	ctx := context.Background()
 	store := testutil.NewFakeStore()
-	if err := store.UpsertAgentProfile(context.Background(), models.AgentProfile{ID: "default", Provider: "ollama", Model: "llama3", AgenticMode: true}); err != nil {
-		t.Fatalf("UpsertAgentProfile: %v", err)
-	}
-	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+	store.SetProjectsDir(t.TempDir())
+	script := fakeagent.Script(report(map[string]any{"summary": "done"}))
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "breakdown-rollup",
-		Tasks:       []models.DraftTask{{Title: breakdownMarkerTitle + ": Produce a status report", Description: testutil.AgenticTestTaskDescription(), AgentID: "default"}},
+		Tasks:       []models.DraftTask{{Title: breakdownMarkerTitle, Description: script}},
 	})
 	if err != nil {
-		t.Fatalf("MaterializePlan: %v", err)
+		t.Fatal(err)
 	}
-	gw := &titleBreakdownGateway{}
-	tuner := planning.NewParameterTuner(config.HealingConfig{Enabled: true, Steps: []string{planning.HealingStepSplitTask}})
-	w := NewWorker(store, gw, &breakdownSandbox{}, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 5, Tuner: tuner, ToolFailureStreak: 1})
-	return store, gw, w, tasks[0]
+	running, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = blockTaskWithBreakdown(ctx, store, *running, []models.DraftTask{
+		{Title: script, SplitChild: true}, {Title: script, SplitChild: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt, _, log := acpRuntime(t)
+	w := NewWorker(store, nil, &routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{Routes: acpRoutes(), ACP: rt})
+	return store, log, w, tasks[0]
 }
 
 func mustGetTask(t *testing.T, store *testutil.FakeKanbanStore, id string) models.Task {
@@ -116,9 +65,8 @@ func mustListChildren(t *testing.T, store *testutil.FakeKanbanStore, id string) 
 func TestBreakdownRollup_ResumedParentCompletesWithoutRedecomposing(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newBreakdownRollupFixture(t)
+	store, log, w, parent := newBreakdownRollupFixture(t)
 
-	w.Process(ctx, parent)
 	if got := mustGetTask(t, store, parent.ID).State; got != models.TaskStateBlocked {
 		t.Fatalf("parent state after breakdown = %s, want BLOCKED", got)
 	}
@@ -135,7 +83,7 @@ func TestBreakdownRollup_ResumedParentCompletesWithoutRedecomposing(t *testing.T
 		t.Fatalf("parent state after children completed = %s, want READY", resumed.State)
 	}
 
-	requestsBefore := len(gw.requests)
+	startsBefore, _ := log.runs()
 	w.Process(ctx, resumed)
 
 	if got := mustGetTask(t, store, parent.ID).State; got != models.TaskStateCompleted {
@@ -144,7 +92,8 @@ func TestBreakdownRollup_ResumedParentCompletesWithoutRedecomposing(t *testing.T
 	if got := len(mustListChildren(t, store, parent.ID)); got != 2 {
 		t.Fatalf("children after resume = %d, want 2 (parent was decomposed again)", got)
 	}
-	if got := len(gw.requests) - requestsBefore; got != 0 {
+	if startsAfter, _ := log.runs(); len(startsAfter) != len(startsBefore) {
+		got := len(startsAfter) - len(startsBefore)
 		t.Fatalf("resumed parent made %d gateway requests, want 0", got)
 	}
 }
@@ -154,22 +103,21 @@ func TestBreakdownRollup_ResumedParentCompletesWithoutRedecomposing(t *testing.T
 func TestBreakdownRollup_BatchPathCompletesResumedParent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newBreakdownRollupFixture(t)
+	store, log, w, parent := newBreakdownRollupFixture(t)
 
-	w.Process(ctx, parent)
 	children := mustListChildren(t, store, parent.ID)
 	w.Process(ctx, mustGetTask(t, store, children[0].ID))
 	w.Process(ctx, mustGetTask(t, store, children[1].ID))
 
 	_, others, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "batch-partner",
-		Tasks:       []models.DraftTask{{Title: "Generate a greeting script", AgentID: "default"}},
+		Tasks:       []models.DraftTask{{Title: fakeagent.Script(report(map[string]any{"summary": "done"})), AgentID: "default"}},
 	})
 	if err != nil {
 		t.Fatalf("MaterializePlan: %v", err)
 	}
 
-	requestsBefore := len(gw.requests)
+	startsBefore, _ := log.runs()
 	w.ProcessBatch(ctx, []models.Task{mustGetTask(t, store, parent.ID), others[0]})
 
 	if got := mustGetTask(t, store, others[0].ID).State; got != models.TaskStateCompleted {
@@ -181,12 +129,8 @@ func TestBreakdownRollup_BatchPathCompletesResumedParent(t *testing.T) {
 	if got := len(mustListChildren(t, store, parent.ID)); got != 2 {
 		t.Fatalf("children after batch resume = %d, want 2", got)
 	}
-	for _, req := range gw.requests[requestsBefore:] {
-		for _, m := range req.Messages {
-			if strings.Contains(m.Content, breakdownMarkerTitle) {
-				t.Fatal("resumed parent was sent to the model in the batch")
-			}
-		}
+	if startsAfter, _ := log.runs(); len(startsAfter)-len(startsBefore) != 1 {
+		t.Fatalf("ACP sessions = %d, want only the batch partner", len(startsAfter)-len(startsBefore))
 	}
 }
 
@@ -196,19 +140,19 @@ func TestBreakdownRollup_BatchPathCompletesResumedParent(t *testing.T) {
 func TestBreakdownRollup_IncompleteSubtasksBlockAgenticCompletion(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newBreakdownRollupFixture(t)
+	store, log, w, parent := newBreakdownRollupFixture(t)
 
-	w.Process(ctx, parent)
 	blocked := mustGetTask(t, store, parent.ID)
 	retried, err := store.UpdateTaskState(ctx, blocked.ID, blocked.UpdatedAt, models.TaskStateReady)
 	if err != nil {
 		t.Fatalf("UpdateTaskState(READY): %v", err)
 	}
 
-	requestsBefore := len(gw.requests)
+	startsBefore, _ := log.runs()
 	w.Process(ctx, *retried)
 
-	if got := len(gw.requests) - requestsBefore; got != 1 {
+	if startsAfter, _ := log.runs(); len(startsAfter)-len(startsBefore) != 1 {
+		got := len(startsAfter) - len(startsBefore)
 		t.Fatalf("gateway requests on retry = %d, want 1", got)
 	}
 	if got := mustGetTask(t, store, parent.ID).State; got == models.TaskStateCompleted {
@@ -242,9 +186,8 @@ func TestLatestBreakdownSubtaskCount_UsesNewestWorkerMarker(t *testing.T) {
 func TestBreakdownRollup_ForgedSubsetMarkerBlocksAgenticCompletion(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newBreakdownRollupFixture(t)
+	store, log, w, parent := newBreakdownRollupFixture(t)
 
-	w.Process(ctx, parent)
 	children := mustListChildren(t, store, parent.ID)
 	w.Process(ctx, mustGetTask(t, store, children[0].ID))
 
@@ -261,13 +204,14 @@ func TestBreakdownRollup_ForgedSubsetMarkerBlocksAgenticCompletion(t *testing.T)
 		t.Fatalf("UpdateTaskState(READY): %v", err)
 	}
 
-	requestsBefore := len(gw.requests)
+	startsBefore, _ := log.runs()
 	w.Process(ctx, *retried)
 
 	if got := mustGetTask(t, store, parent.ID).State; got == models.TaskStateCompleted {
 		t.Fatal("parent completed from a forged subset marker while a subtask was still open")
 	}
-	if got := len(gw.requests) - requestsBefore; got != 1 {
+	if startsAfter, _ := log.runs(); len(startsAfter)-len(startsBefore) != 1 {
+		got := len(startsAfter) - len(startsBefore)
 		t.Fatalf("gateway requests after forged marker = %d, want 1 (normal dispatch)", got)
 	}
 }
@@ -277,21 +221,21 @@ func TestBreakdownRollup_ForgedSubsetMarkerBlocksAgenticCompletion(t *testing.T)
 func TestBreakdownRollup_ReadFailureRequeuesInsteadOfDispatching(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newBreakdownRollupFixture(t)
+	store, log, w, parent := newBreakdownRollupFixture(t)
 
-	w.Process(ctx, parent)
 	for _, child := range mustListChildren(t, store, parent.ID) {
 		w.Process(ctx, mustGetTask(t, store, child.ID))
 	}
 
-	w = NewWorker(&breakdownListCommentsFailureStore{FakeKanbanStore: store}, gw,
+	w = NewWorker(&breakdownListCommentsFailureStore{FakeKanbanStore: store}, nil,
 		&routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 5})
 
 	resumed := mustGetTask(t, store, parent.ID)
-	requestsBefore := len(gw.requests)
+	startsBefore, _ := log.runs()
 	w.Process(ctx, resumed)
 
-	if got := len(gw.requests) - requestsBefore; got != 0 {
+	if startsAfter, _ := log.runs(); len(startsAfter) != len(startsBefore) {
+		got := len(startsAfter) - len(startsBefore)
 		t.Fatalf("gateway requests after a failed roll-up read = %d, want 0", got)
 	}
 	if got := mustGetTask(t, store, parent.ID).State; got != models.TaskStateReady {
@@ -327,15 +271,14 @@ func (s *breakdownCommitFailureStore) UpdateTaskResult(ctx context.Context, id s
 func TestBreakdownRollup_CommitFailureRequeuesParent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newBreakdownRollupFixture(t)
+	store, _, w, parent := newBreakdownRollupFixture(t)
 
-	w.Process(ctx, parent)
 	for _, child := range mustListChildren(t, store, parent.ID) {
 		w.Process(ctx, mustGetTask(t, store, child.ID))
 	}
 
 	failing := &breakdownCommitFailureStore{FakeKanbanStore: store}
-	handled, err := NewWorker(failing, gw, &routingTestSandbox{}, nil, &mockEventSink{},
+	handled, err := NewWorker(failing, nil, &routingTestSandbox{}, nil, &mockEventSink{},
 		WorkerOptions{MaxToolIterations: 5}).tryRollUpBreakdown(ctx, mustGetTask(t, store, parent.ID))
 	if !handled || err == nil {
 		t.Fatalf("tryRollUpBreakdown = (%v, %v), want (true, error) so the caller requeues", handled, err)

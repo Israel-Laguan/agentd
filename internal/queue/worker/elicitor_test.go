@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
@@ -250,7 +251,8 @@ func TestProcess_AmbiguousTaskBlocksForElicitation(t *testing.T) {
 	}
 
 	gw := &elicitationSequenceGateway{elicitationJSON: sampleElicitationJSON()}
-	w := NewWorker(store, gw, &mockAgenticSandbox{}, nil, nil, WorkerOptions{MaxToolIterations: 3})
+	rt, _, _ := acpRuntime(t)
+	w := NewWorker(store, gw, &mockAgenticSandbox{}, nil, nil, WorkerOptions{Routes: acpRoutes(), ACP: rt})
 	w.Process(ctx, *queued)
 
 	assertAmbiguousElicitationBlocked(t, store, ctx, task.ID, gw)
@@ -293,7 +295,8 @@ func TestProcess_FullySpecifiedSkipsElicitation(t *testing.T) {
 	setupAgenticElicitationProfile(t, store, ctx)
 
 	longDesc := strings.Repeat("Ship the billing webhook with idempotent retries and structured logs. ", 12) +
-		"\n- must persist events in postgres\n- must expose /webhooks/billing.go\nAcceptance: returns 200 for valid signatures."
+		"\n- must persist events in postgres\n- must expose the billing webhook\nAcceptance: returns 200 for valid signatures.\n" +
+		fakeagent.Script(report(map[string]any{"summary": "done"}))
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "specified-proj",
 		Tasks: []models.DraftTask{{
@@ -318,7 +321,8 @@ func TestProcess_FullySpecifiedSkipsElicitation(t *testing.T) {
 
 	gw := &elicitationSequenceGateway{elicitationJSON: sampleElicitationJSON()}
 	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{}}
-	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 3})
+	rt, _, _ := acpRuntime(t)
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{Routes: acpRoutes(), ACP: rt})
 	w.Process(ctx, *queued)
 
 	if gw.elicitationCalls != 0 {
@@ -328,8 +332,8 @@ func TestProcess_FullySpecifiedSkipsElicitation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get parent: %v", err)
 	}
-	if parent.State == models.TaskStateBlocked {
-		t.Fatal("fully specified task should not block for elicitation")
+	if parent.State != models.TaskStateCompleted {
+		t.Fatalf("fully specified task state = %s, want COMPLETED", parent.State)
 	}
 }
 

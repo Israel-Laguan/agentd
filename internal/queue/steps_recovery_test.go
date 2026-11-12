@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
 )
 
 // --- Queue scenario steps (retries, ghost recovery, graceful shutdown) ---
@@ -26,14 +28,22 @@ func (s *queueScenario) maxRetryLimit(_ context.Context, limit int) error {
 }
 
 func (s *queueScenario) workerSeesSandboxFailure(ctx context.Context) error {
-	s.gateway.err = nil
-	s.gateway.content = `{"command":"false"}`
-	s.sandbox.result = sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}
+	// The failing command is the agent's now: a turn that fails is the task's
+	// failure, and the retry ladder is what the coordinator still owns.
+	s.useACP = true
+	s.acpGateway = &fakeGateway{}
+	s.rebuild(1)
 	task, ok := s.store.first(models.TaskStateReady)
 	if !ok {
 		return fmt.Errorf("ready task not found")
 	}
-	queued, err := s.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateQueued)
+	updated, err := s.store.update(task.ID, func(task *models.Task) {
+		task.Title = fakeagent.Script(fakeagent.Step{Error: "command failed"})
+	})
+	if err != nil {
+		return err
+	}
+	queued, err := s.store.UpdateTaskState(ctx, updated.ID, updated.UpdatedAt, models.TaskStateQueued)
 	if err != nil {
 		return err
 	}
@@ -140,18 +150,29 @@ func (s *queueScenario) startDaemon() {
 
 func (s *queueScenario) workerRunningSandbox(context.Context) error {
 	s.store.seed(1, models.TaskStateReady)
-	s.sandbox = &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
+	// The marker is the fake agent's Touch side effect, which fires when the
+	// turn starts. Waiting on it (rather than the Command hook, which fires
+	// before cmd.Start) ensures the interrupt cancels an in-flight turn.
+	marker := fmt.Sprintf("agentd-ready-%d.marker", time.Now().UnixNano())
+	markerPath := filepath.Join(s.store.project.WorkspacePath, marker)
+	defer func() { _ = os.Remove(markerPath) }()
+	for i := range s.store.tasks {
+		s.store.tasks[i].Title = fakeagent.Script(
+			fakeagent.Step{Touch: marker},
+			fakeagent.Step{SleepMS: 60_000},
+		)
+	}
+	s.useACP = true
+	s.acpGateway = &fakeGateway{}
+	s.acpStarted, s.acpStop = make(chan struct{}), make(chan struct{})
+	s.acp, s.closeACP = newObservedACPRuntime(s.acpStarted, s.acpStop)
 	s.rebuild(1)
 	s.startDaemon()
 	go func() { _, _, _ = s.daemon.dispatch(s.ctx) }()
-	select {
-	case <-s.sandbox.started:
-		return nil
-	case <-time.After(5 * time.Second):
-		return fmt.Errorf("sandbox did not start")
-	case <-s.ctx.Done():
-		return fmt.Errorf("daemon context canceled before sandbox started")
-	}
+	return waitFor(func() bool {
+		_, err := os.Stat(markerPath)
+		return err == nil
+	}, "the agent to start its turn")
 }
 
 func (s *queueScenario) osInterrupt(context.Context) error {
@@ -170,10 +191,10 @@ func (s *queueScenario) rootContextCancelled(context.Context) error {
 
 func (s *queueScenario) sandboxCaughtCancel(context.Context) error {
 	select {
-	case <-s.sandbox.cancelled:
+	case <-s.acpStop:
 		return nil
-	case <-time.After(time.Second):
-		return fmt.Errorf("sandbox did not observe cancellation")
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("the agent process did not observe cancellation")
 	}
 }
 

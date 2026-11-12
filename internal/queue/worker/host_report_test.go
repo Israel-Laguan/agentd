@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
@@ -87,10 +86,49 @@ func TestHostReportRendersWithoutModelOrShell(t *testing.T) {
 	}
 }
 
+// A review-required profile still approves the rendered report before the task
+// completes: the renderer writes it, then createReviewHandoff blocks the task.
+func TestHostReportRequiresReviewBeforeCompletion(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	files := map[string]string{
+		"os_info.txt":   hostReportFixture,
+		"cpu_info.txt":  "Architecture:                            x86_64\nModel name:                              Intel(R) Core(TM) Ultra 5 226V\nCPU(s):                                  8\n",
+		"mem_info.txt":  "               total        used        free\nMem:            15Gi       7.9Gi       1.2Gi\n",
+		"disk_info.txt": "NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS\nnvme0n1     259:0    0 476.9G  0 disk\n",
+	}
+	task, project := seedHostReportTask(t, store, "Create system report.md summarizing the OS and hardware from the collected files", files)
+	setupReviewProfile(t, store, ctx, "")
+	profile, err := store.GetAgentProfile(ctx, "default")
+	if err != nil {
+		t.Fatalf("get profile: %v", err)
+	}
+	w := NewWorker(store, &routingTestGateway{}, panicSandbox{t}, nil, &mockEventSink{}, WorkerOptions{})
+	w.dispatchProcess(ctx, task, project, *profile)
+
+	got, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.State != models.TaskStateBlocked {
+		t.Fatalf("task state = %s, want BLOCKED pending review", got.State)
+	}
+	children, err := store.ListChildTasks(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	for _, child := range children {
+		if strings.HasPrefix(child.Title, models.HITLSubtaskTitleReview) {
+			return
+		}
+	}
+	t.Fatalf("children = %+v, want a review subtask", children)
+}
+
 // B-046: a report missing a core fact must not burn retries re-rendering the
 // same workspace (the collectors already ran, so the next attempt would hit
-// the same gap). The renderer steps aside and the normal model path runs.
-func TestHostReportFallsBackToModelOnPartialReport(t *testing.T) {
+// the same gap). With no execution route, the task fails to a human.
+func TestHostReportWithoutRouteFailsOnPartialReport(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	files := map[string]string{
@@ -98,30 +136,25 @@ func TestHostReportFallsBackToModelOnPartialReport(t *testing.T) {
 		"mem.txt":     "               total        used        free\nMem:            15Gi       7.9Gi       1.2Gi\n",
 	}
 	task, project := seedHostReportTask(t, store, "Create system report.md summarizing the OS and hardware from the collected files", files)
-	gw := &sequenceGateway{responses: []gateway.AIResponse{{Content: "done"}}}
-	w := NewWorker(store, gw, fixedResultSandbox{result: sandbox.Result{Success: true}}, nil, &mockEventSink{}, WorkerOptions{})
+	w := NewWorker(store, nil, fixedResultSandbox{result: sandbox.Result{Success: true}}, nil, &mockEventSink{}, WorkerOptions{})
 	w.dispatchProcess(ctx, task, project, agenticHostProfile)
 
-	if len(gw.requests) == 0 {
-		t.Fatal("gateway never called, want the model path for partial facts")
-	}
 	if _, err := os.Stat(filepath.Join(project.WorkspacePath, "report.md")); err == nil {
-		t.Fatal("report.md was written for partial facts; the model path owns the task instead")
+		t.Fatal("report.md was written for partial facts")
 	}
-	if after, _ := store.GetTask(ctx, task.ID); after.State != models.TaskStateCompleted {
-		t.Fatalf("task state = %s, want COMPLETED via the model path", after.State)
+	if after, _ := store.GetTask(ctx, task.ID); after.State != models.TaskStateFailedRequiresHuman {
+		t.Fatalf("task state = %s, want FAILED_REQUIRES_HUMAN without an exec.turn route", after.State)
 	}
 }
 
-// With nothing collected the renderer steps aside and the normal model path runs.
-func TestHostReportFallsBackToModelWhenNoHostFactsCollected(t *testing.T) {
+// With nothing collected the renderer steps aside; an execution route is required.
+func TestHostReportWithoutRouteFailsWhenNoHostFactsCollected(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	task, project := seedHostReportTask(t, store, "Create system report.md summarizing the OS and hardware", map[string]string{"notes.txt": "nothing"})
-	gw := &sequenceGateway{responses: []gateway.AIResponse{{Content: "done"}}}
-	w := NewWorker(store, gw, fixedResultSandbox{result: sandbox.Result{Success: true}}, nil, &mockEventSink{}, WorkerOptions{})
+	w := NewWorker(store, nil, fixedResultSandbox{result: sandbox.Result{Success: true}}, nil, &mockEventSink{}, WorkerOptions{})
 	w.dispatchProcess(ctx, task, project, agenticHostProfile)
-	if len(gw.requests) == 0 {
-		t.Fatal("gateway never called, want the model path when no facts were collected")
+	if after, _ := store.GetTask(ctx, task.ID); after.State != models.TaskStateFailedRequiresHuman {
+		t.Fatalf("task state = %s, want FAILED_REQUIRES_HUMAN without an exec.turn route", after.State)
 	}
 }

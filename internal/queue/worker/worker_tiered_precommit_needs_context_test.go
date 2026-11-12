@@ -142,7 +142,7 @@ func TestTieredVerify_NeedsContextInterceptsBeforeCommit(t *testing.T) {
 	sb := &mockAgenticSandbox{}
 	w := NewWorker(store, gw, sb, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 10})
 
-	w.Process(ctx, verify)
+	runLegacyTieredTest(t, ctx, w, verify)
 
 	assertTieredStepReachedNeedsContext(t, ctx, store, verify.ID)
 	assertStillBlocked(t, ctx, store, dependent.ID)
@@ -174,7 +174,7 @@ func TestTieredExecute_NeedsContextInterceptsBeforeCommit(t *testing.T) {
 	sb := &mockAgenticSandbox{}
 	w := NewWorker(store, gw, sb, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 10})
 
-	w.Process(ctx, execute)
+	runLegacyTieredTest(t, ctx, w, execute)
 
 	assertTieredStepReachedNeedsContext(t, ctx, store, execute.ID)
 	assertStillBlocked(t, ctx, store, dependent.ID)
@@ -219,7 +219,7 @@ func TestTieredVerify_NormalPassStillCommitsNormally(t *testing.T) {
 	sb := &mockAgenticSandbox{}
 	w := NewWorker(store, gw, sb, nil, &storeEventSink{store: store}, WorkerOptions{MaxToolIterations: 10})
 
-	w.Process(ctx, verify)
+	runLegacyTieredTest(t, ctx, w, verify)
 
 	current, err := store.GetTask(ctx, verify.ID)
 	if err != nil {
@@ -256,7 +256,7 @@ func TestTieredExecute_FailedRegatherAbandonsTheStep(t *testing.T) {
 	w := NewWorker(&regatherSpawnFailureStore{FakeKanbanStore: store}, gw, &mockAgenticSandbox{},
 		nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 10})
 
-	w.Process(ctx, execute)
+	runLegacyTieredTest(t, ctx, w, execute)
 
 	step, err := store.GetTask(ctx, execute.ID)
 	if err != nil {
@@ -298,7 +298,7 @@ func TestTieredVerify_DiversionCheckFailureDoesNotClassifyOutput(t *testing.T) {
 	failing := &diversionCheckFailureStore{FakeKanbanStore: store}
 	w := NewWorker(failing, gw, &mockAgenticSandbox{}, nil, &storeEventSink{store: store}, WorkerOptions{MaxToolIterations: 10})
 
-	w.Process(ctx, verify)
+	runLegacyTieredTest(t, ctx, w, verify)
 
 	if failing.reads < 4 {
 		t.Fatalf("expected the diversion check to retry %d times, got %d", 4, failing.reads)

@@ -6,18 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/config"
-	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
 )
 
 func TestWorkerCompletesSuccessfulTask(t *testing.T) {
-	store := newWorkerStore()
-	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
-	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"}}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
+	store := newACPWorkerStore(t)
+	scriptTask(store, acpReport("done"))
+	worker := newACPWorker(t, store, &fakeGateway{}, &fakeSandbox{}, nil, WorkerOptions{})
 	worker.Process(context.Background(), store.task)
 	if store.result == nil || !store.result.Success {
 		t.Fatalf("result = %#v", store.result)
@@ -25,28 +22,24 @@ func TestWorkerCompletesSuccessfulTask(t *testing.T) {
 }
 
 func TestWorkerHeartbeatUpdatesWhileRunning(t *testing.T) {
-	store := newWorkerStore()
-	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "sleep 1")}}
-	sb := &fakeSandbox{
-		result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"},
-		delay:  25 * time.Millisecond,
-	}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{HeartbeatInterval: 5 * time.Millisecond})
+	store := newACPWorkerStore(t)
+	// The agent stays in its turn long enough for the heartbeat to tick.
+	scriptTask(store, fakeagent.Step{SleepMS: 150})
+	worker := newACPWorker(t, store, &fakeGateway{}, &fakeSandbox{}, nil, WorkerOptions{HeartbeatInterval: 5 * time.Millisecond})
 
 	worker.Process(context.Background(), store.task)
 
 	if store.heartbeats == 0 {
-		t.Fatal("worker did not update task heartbeat during sandbox execution")
+		t.Fatal("worker did not update task heartbeat while the agent ran")
 	}
 }
 
 func TestWorkerRetriesThenEvicts(t *testing.T) {
-	store := newWorkerStore()
+	store := newACPWorkerStore(t)
 	store.task.RetryCount = 2
-	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}
-	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}}
+	scriptTask(store, fakeagent.Step{Error: "tool crashed"})
 	sink := &recordingSink{}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink, WorkerOptions{MaxRetries: 3, ToolFailureStreak: 1})
+	worker := newACPWorker(t, store, &fakeGateway{}, &fakeSandbox{}, sink, WorkerOptions{MaxRetries: 3})
 	worker.Process(context.Background(), store.task)
 	if store.task.State != models.TaskStateFailedRequiresHuman {
 		t.Fatalf("state=%s, want FAILED_REQUIRES_HUMAN", store.task.State)
@@ -56,51 +49,17 @@ func TestWorkerRetriesThenEvicts(t *testing.T) {
 	}
 }
 
-func TestWorkerBreakerErrorRequeuesWithoutRetry(t *testing.T) {
-	store := newWorkerStore()
-	gw := &fakeGateway{err: models.ErrLLMUnreachable}
-	breaker := NewCircuitBreaker()
-	worker := NewWorker(store, gw, &fakeSandbox{}, breaker, nil, WorkerOptions{})
-	worker.Process(context.Background(), store.task)
-	if store.task.RetryCount != 0 || store.task.State != models.TaskStateReady {
-		t.Fatalf("state=%s retries=%d", store.task.State, store.task.RetryCount)
-	}
-}
-
-func TestWorkerBreakerErrorCreatesHumanTaskWhenBreakerOpens(t *testing.T) {
-	store := newWorkerStore()
-	gw := &fakeGateway{err: models.ErrLLMUnreachable}
-	breaker := NewCircuitBreaker()
-	sink := &recordingSink{}
-	worker := NewWorker(store, gw, &fakeSandbox{}, breaker, sink, WorkerOptions{})
-
-	worker.Process(context.Background(), store.task)
-	worker.Process(context.Background(), store.task)
-	worker.Process(context.Background(), store.task)
-
-	if store.task.State != models.TaskStateBlocked {
-		t.Fatalf("state=%s, want BLOCKED", store.task.State)
-	}
-	if len(store.drafts) != 1 || store.drafts[0].Assignee != models.TaskAssigneeHuman {
-		t.Fatalf("drafts = %#v", store.drafts)
-	}
-	if !strings.Contains(store.drafts[0].Description, "All configured AI providers failed") {
-		t.Fatalf("description = %q", store.drafts[0].Description)
-	}
-	if !sink.hasEvent("PROVIDER_EXHAUSTED_HANDOFF") {
-		t.Fatalf("events = %#v, want PROVIDER_EXHAUSTED_HANDOFF", sink.events)
-	}
-}
-
+// The healing tuner's split step runs when the agent's attempt fails: the
+// coordinator asks its own L1 split stage for subtasks and blocks the task on
+// them, without running the agent again.
 func TestWorkerBreaksDownTooComplexTask(t *testing.T) {
-	store := newWorkerStore()
+	store := newACPWorkerStore(t)
+	scriptTask(store, fakeagent.Step{Error: "too complex for one turn"})
 	gw := &fakeGateway{
-		toolCalls:   []gateway.ToolCall{testutil.ReadToolCall("call_1", "missing.txt")},
-		nextContent: `{"subtasks":[{"title":"First","description":"Do first"},{"title":"Second","description":"Do second"}]}`,
+		content: `{"subtasks":[{"title":"First","description":"Do first"},{"title":"Second","description":"Do second"}]}`,
 	}
-	sb := &fakeSandbox{}
 	tuner := NewParameterTuner(config.HealingConfig{Enabled: true, Steps: []string{HealingStepSplitTask}})
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{Tuner: tuner, ToolFailureStreak: 1})
+	worker := newACPWorker(t, store, gw, &fakeSandbox{}, nil, WorkerOptions{Tuner: tuner})
 
 	worker.Process(context.Background(), store.task)
 
@@ -112,47 +71,6 @@ func TestWorkerBreaksDownTooComplexTask(t *testing.T) {
 	}
 	if len(store.drafts) != 2 || store.drafts[0].Title != "First" || store.drafts[1].Title != "Second" {
 		t.Fatalf("drafts = %#v", store.drafts)
-	}
-	if len(sb.commands) != 0 {
-		t.Fatalf("commands = %#v, want none", sb.commands)
-	}
-}
-
-func TestWorkerPayloadUsesSandboxEnvAllowlist(t *testing.T) {
-	t.Setenv("OPENAI_API_KEY", "super-secret")
-	t.Setenv("PATH", "/usr/bin")
-	t.Setenv("LANG", "C")
-
-	store := newWorkerStore()
-	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "env")}}
-	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"}}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{
-		SandboxWallTimeout:  2 * time.Minute,
-		SandboxEnvAllowlist: []string{"PATH", "LANG"},
-		SandboxExtraEnv:     []string{"CI=true"},
-	})
-
-	worker.Process(context.Background(), store.task)
-
-	if len(sb.payloads) == 0 {
-		t.Fatalf("sandbox payloads = 0, want > 0")
-	}
-	payload := sb.payloads[0]
-	if payload.WallTimeout != 2*time.Minute {
-		t.Fatalf("WallTimeout = %s, want 2m", payload.WallTimeout)
-	}
-	envBlob := strings.Join(payload.EnvVars, "\n")
-	if !strings.Contains(envBlob, "PATH=/usr/bin") {
-		t.Fatalf("env missing PATH: %q", envBlob)
-	}
-	if !strings.Contains(envBlob, "LANG=C") {
-		t.Fatalf("env missing LANG: %q", envBlob)
-	}
-	if strings.Contains(envBlob, "OPENAI_API_KEY=super-secret") {
-		t.Fatalf("env leaked OPENAI_API_KEY: %q", envBlob)
-	}
-	if !strings.Contains(envBlob, "CI=true") {
-		t.Fatalf("env missing extra entry CI=true: %q", envBlob)
 	}
 }
 
@@ -171,128 +89,29 @@ func TestBuildSandboxEnvWithNilAllowlistDoesNotInherit(t *testing.T) {
 	}
 }
 
-func TestWorkerPayloadEnvironmentDoesNotDependOnProcessEnvOrder(t *testing.T) {
-	t.Setenv("PATH", "/bin")
-	t.Setenv("HOME", "/tmp/home")
-	store := newWorkerStore()
-	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
-	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"}}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{
-		SandboxEnvAllowlist: []string{"HOME", "PATH"},
-	})
-	worker.Process(context.Background(), store.task)
-	if len(sb.payloads) == 0 {
-		t.Fatal("expected payload")
-	}
-	got := strings.Join(sb.payloads[0].EnvVars, "\n")
-	if !strings.Contains(got, "PATH=") || !strings.Contains(got, "HOME=") {
-		t.Fatalf("payload env = %q", got)
-	}
-}
-
-func TestWorkerAgenticModeExecutesToolAndContinuesLoop(t *testing.T) {
-	store := newWorkerStore()
-	store.profile.AgenticMode = true
-	store.profile.Provider = "openai"
-	gw := &fakeGateway{
-		content:       "Task completed successfully",
-		toolCalls:     []gateway.ToolCall{{ID: "call_1", Type: "function", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hello"}`}}},
-		nextContent:   "Task completed successfully",
-		nextToolCalls: nil,
-	}
-	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "hello"}}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
-
-	worker.Process(context.Background(), store.task)
-
-	if store.result == nil || !store.result.Success {
-		t.Fatalf("result = %#v, want success", store.result)
-	}
-	if len(sb.commands) != 1 || sb.commands[0] != "echo hello" {
-		t.Fatalf("commands = %#v, want [echo hello]", sb.commands)
-	}
-	if len(gw.requests) != 2 {
-		t.Fatalf("gateway requests = %d, want 2 (tool + final)", len(gw.requests))
-	}
-}
-
-func TestWorkerAgenticModeTerminatesLoopOnTextResponse(t *testing.T) {
-	store := newWorkerStore()
-	store.profile.AgenticMode = true
-	store.profile.Provider = "openai"
-	gw := &fakeGateway{
-		content: "Final response text",
-	}
-	sb := &fakeSandbox{}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
-
-	worker.Process(context.Background(), store.task)
-
-	if store.result == nil || !store.result.Success {
-		t.Fatalf("result = %#v, want success", store.result)
-	}
-	if !strings.Contains(store.result.Payload, "Final response text") {
-		t.Fatalf("payload = %v, want Final response text", store.result.Payload)
-	}
-	if len(gw.requests) != 1 {
-		t.Fatalf("gateway requests = %d, want 1 (final)", len(gw.requests))
-	}
-	if len(sb.commands) != 0 {
-		t.Fatalf("commands = %#v, want none", sb.commands)
-	}
-}
-
+// An attempt the agent fails is retried, not recorded: a failed turn is the
+// agent's failure, so the coordinator counts a retry and leaves the task READY.
 func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
-	store := newWorkerStore()
-	store.profile.AgenticMode = true
-	store.profile.Provider = "openai"
-	gw := &fakeGateway{
-		content:       "Task completed",
-		toolCalls:     []gateway.ToolCall{{ID: "call_1", Type: "function", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"false"}`}}},
-		nextContent:   "Task completed",
-		nextToolCalls: nil,
-	}
-	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "command failed"}}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
+	store := newACPWorkerStore(t)
+	scriptTask(store, fakeagent.Step{Error: "tool crashed"})
+	worker := newACPWorker(t, store, &fakeGateway{}, &fakeSandbox{}, nil, WorkerOptions{})
 
 	worker.Process(context.Background(), store.task)
 
-	// B-082: the final text came after a failed command and nothing passed
-	// after it, so the task must not be recorded as a success; it is retried.
 	if store.result != nil || store.task.State != models.TaskStateReady || store.task.RetryCount != 1 {
-		t.Fatalf("result = %#v state = %s retries = %d, want no result and a retry after a failed command", store.result, store.task.State, store.task.RetryCount)
-	}
-	if len(sb.commands) != 1 || sb.commands[0] != "false" {
-		t.Fatalf("commands = %#v, want [false]", sb.commands)
-	}
-	if len(gw.requests) != 2 {
-		t.Fatalf("gateway requests = %d, want 2 (tool + final)", len(gw.requests))
-	}
-	var toolMessage *gateway.PromptMessage
-	for i := range gw.requests[1].Messages {
-		msg := gw.requests[1].Messages[i]
-		if msg.Role == "tool" && msg.ToolCallID == "call_1" {
-			toolMessage = &msg
-			break
-		}
-	}
-	if toolMessage == nil {
-		t.Fatalf("second request missing tool response for call_1: %#v", gw.requests[1].Messages)
-		return
-	}
-	if !strings.Contains(toolMessage.Content, `"ExitCode":1`) || !strings.Contains(toolMessage.Content, "command failed") {
-		t.Fatalf("tool message = %q, want exit code and stderr details", toolMessage.Content)
+		t.Fatalf("result = %#v state = %s retries = %d, want no result and a retry after a failed turn", store.result, store.task.State, store.task.RetryCount)
 	}
 }
 
-// TestWorkerQuotaExhaustedCreatesImmediateHandoff verifies that a single HTTP
-// 429 (ErrLLMQuotaExceeded) creates a PROVIDER_EXHAUSTED_HANDOFF immediately
-// without requeuing the task or incrementing the retry counter.
+// TestWorkerQuotaExhaustedCreatesImmediateHandoff verifies that a single quota
+// failure (the agent reporting a 429, which the ACP driver maps to
+// ErrLLMQuotaExceeded) creates a PROVIDER_EXHAUSTED_HANDOFF immediately without
+// requeuing the task or incrementing the retry counter.
 func TestWorkerQuotaExhaustedCreatesImmediateHandoff(t *testing.T) {
-	store := newWorkerStore()
-	gw := &fakeGateway{err: models.ErrLLMQuotaExceeded}
+	store := newACPWorkerStore(t)
+	scriptTask(store, fakeagent.Step{Error: "429 Too Many Requests"})
 	sink := &recordingSink{}
-	worker := NewWorker(store, gw, &fakeSandbox{}, NewCircuitBreaker(), sink, WorkerOptions{})
+	worker := newACPWorker(t, store, &fakeGateway{}, &fakeSandbox{}, sink, WorkerOptions{})
 
 	worker.Process(context.Background(), store.task)
 
@@ -316,59 +135,24 @@ func TestWorkerQuotaExhaustedCreatesImmediateHandoff(t *testing.T) {
 
 // TestWorkerPerProviderBreakerIsolation verifies that a quota error recorded
 // against "gemini" opens only the gemini breaker and leaves the "horde" breaker
-// unaffected. A second task with a different provider should not be blocked.
+// unaffected.
 func TestWorkerPerProviderBreakerIsolation(t *testing.T) {
-	// First worker uses provider "gemini" and encounters quota errors.
-	storeGemini := newWorkerStore()
+	storeGemini := newACPWorkerStore(t)
 	storeGemini.profile.Provider = "gemini"
-	gw := &fakeGateway{err: models.ErrLLMQuotaExceeded}
+	scriptTask(storeGemini, fakeagent.Step{Error: "429 Too Many Requests"})
 	pb := NewProviderBreakers()
-	workerGemini := NewWorker(storeGemini, gw, &fakeSandbox{}, NewCircuitBreaker(), nil,
+	workerGemini := newACPWorker(t, storeGemini, &fakeGateway{}, &fakeSandbox{}, nil,
 		WorkerOptions{ProviderBreakers: pb})
 
 	workerGemini.Process(context.Background(), storeGemini.task)
 
-	// Gemini breaker should now be tracking the failure.
 	geminiBreaker := pb.Get("gemini")
 	if geminiBreaker.FailureCount() == 0 {
 		t.Fatal("gemini breaker should have recorded failure")
 	}
 
-	// Horde breaker must be untouched.
 	hordeBreaker := pb.Get("horde")
 	if hordeBreaker.State() != BreakerClosed {
 		t.Fatalf("horde breaker state = %s, want CLOSED", hordeBreaker.State())
-	}
-}
-
-// TestWorkerPreExecPerProviderBreakerCheck verifies that a task whose provider's
-// breaker is open is immediately handed off without making any LLM calls.
-func TestWorkerPreExecPerProviderBreakerCheck(t *testing.T) {
-	store := newWorkerStore()
-	store.profile.Provider = "gemini"
-
-	pb := NewProviderBreakers()
-	// Manually open the gemini breaker.
-	for i := 0; i < 3; i++ {
-		pb.Get("gemini").RecordError(models.ErrLLMQuotaExceeded)
-	}
-
-	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
-	sb := &fakeSandbox{result: sandbox.Result{Success: true}}
-	sink := &recordingSink{}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink,
-		WorkerOptions{ProviderBreakers: pb})
-
-	worker.Process(context.Background(), store.task)
-
-	if store.task.State != models.TaskStateBlocked {
-		t.Fatalf("state = %s, want BLOCKED (pre-exec breaker check)", store.task.State)
-	}
-	// No LLM call should have been made.
-	if len(gw.requests) > 0 {
-		t.Fatalf("gateway requests = %d, want 0 (breaker blocked before LLM call)", len(gw.requests))
-	}
-	if !sink.hasEvent("PROVIDER_EXHAUSTED_HANDOFF") {
-		t.Fatalf("events = %#v, want PROVIDER_EXHAUSTED_HANDOFF", sink.events)
 	}
 }

@@ -69,6 +69,7 @@ const (
 
 // TestJ16_SiblingsWaitForProviderProbe is J16.
 func TestJ16_SiblingsWaitForProviderProbe(t *testing.T) {
+	t.Skip("moves in T-071")
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}

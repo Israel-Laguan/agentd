@@ -17,10 +17,11 @@ import (
 // identifiers are never read. It returns false, leaving the task untouched,
 // when the task is not a report task, when no host facts were collected, or
 // when the collection is partial: retrying the render on the same workspace
-// cannot produce the missing facts (the collectors already ran), so the model
-// path runs instead of burning the retry budget on an unchanged workspace
-// (B-046).
-func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, project models.Project) bool {
+// cannot produce the missing facts (the collectors already ran), so the
+// dispatch falls back to the task's ACP route, and fails with the render reason
+// on its event log when it has none rather than burning the retry budget on an
+// unchanged workspace (B-046).
+func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) bool {
 	if w.goldenRepairPending(ctx, task) {
 		return false
 	}
@@ -33,10 +34,12 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 	if err != nil {
 		var missing *hostreport.MissingFactsError
 		if errors.As(err, &missing) {
-			slog.Warn("host report incomplete; falling back to the model path", "task_id", task.ID, "error", err)
+			slog.Warn("host report incomplete; execution requires an ACP route", "task_id", task.ID, "error", err)
+			w.Emit(ctx, task, "HOST_REPORT_INCOMPLETE", err.Error())
 			return false
 		}
-		slog.Warn("host report render failed; falling back to the model path", "task_id", task.ID, "error", err)
+		slog.Warn("host report render failed; execution requires an ACP route", "task_id", task.ID, "error", err)
+		w.Emit(ctx, task, "HOST_REPORT_RENDER_FAILED", err.Error())
 		return false
 	}
 	if !ok {
@@ -50,19 +53,12 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 		}
 
 	}
+	if profile.RequireReview {
+		// The renderer produces the report, but a review-required profile still
+		// has to approve it before the task completes.
+		w.CommitTextWithProfile(ctx, task, report, &profile)
+		return true
+	}
 	w.commit(ctx, task, sandbox.Result{Success: true, Stdout: report}, nil)
 	return true
-}
-
-// renderBatchHostReports completes the host report tasks of a batch the same
-// way the single-task paths do, before the batch model call, and returns the
-// tasks still needing a model call (B-050).
-func (w *Worker) renderBatchHostReports(ctx context.Context, tasks []models.Task, project models.Project) []models.Task {
-	remaining := tasks[:0:0]
-	for _, task := range tasks {
-		if !w.tryRenderHostReport(ctx, task, project) {
-			remaining = append(remaining, task)
-		}
-	}
-	return remaining
 }

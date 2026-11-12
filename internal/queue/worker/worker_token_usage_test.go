@@ -6,10 +6,10 @@ import (
 	"sync"
 	"testing"
 
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
+	acpsdk "github.com/coder/acp-go-sdk"
 )
 
 // fakeTokenStore records AddTokenUsage calls for test assertions.
@@ -55,329 +55,72 @@ func (s *fakeTokenStore) callCount() int {
 	return len(s.calls)
 }
 
-// singleResponseGateway returns a fixed response for every Generate call.
-type singleResponseGateway struct {
-	resp gateway.AIResponse
-	err  error
-}
-
-func (g *singleResponseGateway) ProviderSupportsChatTools(provider string) bool {
-	return testutil.ProviderSupportsChatTools(provider)
-}
-
-func (g *singleResponseGateway) Generate(_ context.Context, _ gateway.AIRequest) (gateway.AIResponse, error) {
-	return g.resp, g.err
-}
-func (g *singleResponseGateway) Embed(_ context.Context, _ gateway.EmbedRequest) (gateway.EmbedResponse, error) {
-	return gateway.EmbedResponse{}, nil
-}
-
-// newTokenUsageWorker creates an agentic worker wired with the
-// given gateway and token store.
-func newTokenUsageWorker(t *testing.T, gw gateway.AIGateway, ts TokenUsageStore) (*mockAgenticStore, *Worker, models.Task) {
-	t.Helper()
-	store := &mockAgenticStore{}
-	sb := &fakeSuccessExecutor{}
-	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{
-		MaxToolIterations: 5,
-		TokenStore:        ts,
-	})
-	task := models.Task{
-		BaseEntity:  models.BaseEntity{ID: "task-legacy-token"},
-		ProjectID:   "proj-1",
-		AgentID:     "agent-legacy",
-		Title:       "legacy task",
-		Description: "run ls",
-		State:       models.TaskStateQueued,
-	}
-	store.profile = models.AgentProfile{
-		ID:          "agent-legacy",
-		Provider:    "openai",
-		Model:       "gpt-4",
-		AgenticMode: true,
-	}
-	store.project = models.Project{
-		BaseEntity:    models.BaseEntity{ID: "proj-1"},
-		WorkspacePath: "/tmp/ws",
-	}
-	store.task = task
-	return store, w, task
-}
-
-// TestTokenUsage_AgenticPath_WritesSingleTurn verifies that the agentic worker
-// calls AddTokenUsage with the response's TokenUsage after each turn.
-func TestTokenUsage_AgenticPath_WritesSingleTurn(t *testing.T) {
-	t.Parallel()
-	ts := &fakeTokenStore{}
-	gw := &sequenceGateway{responses: []gateway.AIResponse{
-		{Content: "[COMPLETED] done", TokenUsage: 15},
-	}}
-	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{}}
-	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
-	w.tokenStore = ts
-
-	w.Process(context.Background(), task)
-
-	if got := ts.totalTokens(); got != 15 {
-		t.Errorf("total tokens = %d, want 15", got)
-	}
-	if got := ts.callCount(); got != 1 {
-		t.Fatalf("AddTokenUsage calls = %d, want 1", got)
-	}
-	if ts.calls[0].taskID != task.ID {
-		t.Errorf("taskID = %q, want %q", ts.calls[0].taskID, task.ID)
-	}
-	_ = store
-
-	// Exercise DisableTokenRecording via the public option (was previously dead code).
-	ts2 := &fakeTokenStore{}
-	gw2 := &sequenceGateway{responses: []gateway.AIResponse{{Content: "[COMPLETED] done", TokenUsage: 15}}}
-	store2, _, task2 := newAgenticIntegrationWorker(t, gw2, sb, 10)
-	wDisable := NewWorker(store2, gw2, sb, nil, nil, WorkerOptions{
-		MaxToolIterations:     5,
-		TokenStore:            ts2,
-		DisableTokenRecording: true,
-	})
-	wDisable.Process(context.Background(), task2)
-	if got := ts2.callCount(); got != 0 {
-		t.Fatalf("with DisableTokenRecording calls = %d, want 0", got)
-	}
-}
-
-func TestTokenUsage_EmitsTokenUsageEvent(t *testing.T) {
-	t.Parallel()
-	ts := &fakeTokenStore{}
+// ACP usage is recorded once for the task even without a rolling budget.
+func TestACPTokenUsageIsRecordedAndEmitted(t *testing.T) {
+	step := report(map[string]any{"summary": "done"})
+	step.Usage = &acpsdk.Usage{TotalTokens: 15}
+	w, store, task, project, profile, _, _ := acpFixture(t, fakeagent.Script(step), false)
+	tokens := &fakeTokenStore{}
 	sink := &mockEventSink{}
-	gw := &sequenceGateway{responses: []gateway.AIResponse{
-		{Content: "[COMPLETED] done", TokenUsage: 15},
-	}}
-	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{}}
-	_, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
-	w.tokenStore = ts
-	w.sink = sink
-
-	w.Process(context.Background(), task)
-
-	var found bool
-	for _, ev := range sink.events {
-		if ev.Type == models.EventTypeTokenUsage {
-			found = true
-			if ev.Payload != `{"tokens":15}` {
-				t.Errorf("payload = %q, want {\"tokens\":15}", ev.Payload)
-			}
-			if ev.TaskID.String != task.ID {
-				t.Errorf("taskID = %q, want %q", ev.TaskID.String, task.ID)
-			}
+	w.tokenStore, w.sink = tokens, sink
+	w.dispatchProcess(context.Background(), task, project, profile)
+	if got := mustGetTask(t, store, task.ID).State; got != models.TaskStateCompleted {
+		t.Fatalf("state = %s, want COMPLETED", got)
+	}
+	if tokens.totalTokens() != 15 || tokens.callCount() != 1 || tokens.calls[0].taskID != task.ID {
+		t.Fatalf("token calls = %+v, want 15 for task %s", tokens.calls, task.ID)
+	}
+	for _, event := range sink.events {
+		if event.Type == models.EventTypeTokenUsage && event.TaskID.String == task.ID && event.Payload == `{"tokens":15}` {
+			return
 		}
 	}
-	if !found {
-		t.Fatal("expected TOKEN_USAGE event")
-	}
+	t.Fatalf("events = %+v, want TOKEN_USAGE for 15 on task %s", sink.events, task.ID)
 }
 
-// TestTokenUsage_FinalTurn_WritesUsage verifies that the worker records
-// token usage from the gateway response via AddTokenUsage.
-func TestTokenUsage_FinalTurn_WritesUsage(t *testing.T) {
-	t.Parallel()
-	ts := &fakeTokenStore{}
-	gw := &singleResponseGateway{
-		resp: gateway.AIResponse{Content: "done", TokenUsage: 10},
-	}
-	_, w, task := newTokenUsageWorker(t, gw, ts)
-
-	w.Process(context.Background(), task)
-
-	if got := ts.totalTokens(); got != 10 {
-		t.Errorf("total tokens = %d, want 10", got)
-	}
-	if got := ts.callCount(); got != 1 {
-		t.Errorf("AddTokenUsage calls = %d, want 1", got)
-	}
-}
-
-// TestTokenUsage_AgenticPath_Accumulates verifies that multiple agentic turns
-// accumulate token usage additively (10 + 5 + 10 = 25).
-func TestTokenUsage_AgenticPath_Accumulates(t *testing.T) {
-	t.Parallel()
-	ts := &fakeTokenStore{}
-
-	toolCall := gateway.ToolCall{
-		ID: "call-1", Type: "function",
-		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo 1"}`},
-	}
-	gw := &sequenceGateway{responses: []gateway.AIResponse{
-		{Content: "", ToolCalls: []gateway.ToolCall{toolCall}, TokenUsage: 10},
-		{Content: "", ToolCalls: []gateway.ToolCall{toolCall}, TokenUsage: 5},
-		{Content: "[COMPLETED] done", TokenUsage: 10},
-	}}
-	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
-		"echo 1": {Success: true, ExitCode: 0, Stdout: "1\n"},
-	}}
-	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
-	w.tokenStore = ts
-
-	w.Process(context.Background(), task)
-
-	if got := ts.totalTokens(); got != 25 {
-		t.Errorf("total accumulated tokens = %d, want 25", got)
-	}
-	if got := ts.callCount(); got != 3 {
-		t.Errorf("AddTokenUsage calls = %d, want 3", got)
-	}
-	_ = store
-}
-
-// TestTokenUsage_RollingLimitZero_StillRecords verifies that token usage is
-// persisted even when TokenUsageHook is nil (rolling_token_limit == 0).
-func TestTokenUsage_RollingLimitZero_StillRecords(t *testing.T) {
-	t.Parallel()
-	ts := &fakeTokenStore{}
-	gw := &singleResponseGateway{
-		resp: gateway.AIResponse{Content: "done", TokenUsage: 7},
-	}
-	// Wire TokenStore but NOT TokenUsageHook (simulates rolling_token_limit=0)
-	store := &mockAgenticStore{}
-	sb := &fakeSuccessExecutor{}
-	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{
-		MaxToolIterations: 5,
-		TokenUsageHook:    nil, // explicitly nil — rolling limit not configured
-		TokenStore:        ts,
+func TestACPTokenRecordingCanBeDisabled(t *testing.T) {
+	step := report(map[string]any{"summary": "done"})
+	step.Usage = &acpsdk.Usage{TotalTokens: 15}
+	store, task, project, profile := acpTask(t, fakeagent.Script(step), "do the thing", false)
+	rt, _, _ := acpRuntime(t)
+	tokens := &fakeTokenStore{}
+	w := NewWorker(store, nil, &routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{
+		Routes: acpRoutes(), ACP: rt, TokenStore: tokens, DisableTokenRecording: true,
 	})
-	task := models.Task{
-		BaseEntity:  models.BaseEntity{ID: "task-no-rolling"},
-		ProjectID:   "proj-1",
-		AgentID:     "agent-x",
-		Title:       "no rolling limit task",
-		Description: "echo hi",
-		State:       models.TaskStateQueued,
-	}
-	store.profile = models.AgentProfile{
-		ID:          "agent-x",
-		Provider:    "openai",
-		Model:       "gpt-4",
-		AgenticMode: true,
-	}
-	store.project = models.Project{
-		BaseEntity:    models.BaseEntity{ID: "proj-1"},
-		WorkspacePath: "/tmp/ws",
-	}
-	store.task = task
-
-	w.Process(context.Background(), task)
-
-	if got := ts.totalTokens(); got != 7 {
-		t.Errorf("total tokens = %d, want 7 (rolling limit 0 must not suppress DB write)", got)
+	w.dispatchProcess(context.Background(), task, project, profile)
+	if tokens.callCount() != 0 {
+		t.Fatalf("token calls = %d, want 0", tokens.callCount())
 	}
 }
 
-// TestTokenUsage_APIResponse_IncludesField is a sanity check that models.Task
-// has token_usage in its JSON representation — covering the API response requirement.
-func TestTokenUsage_APIResponse_IncludesField(t *testing.T) {
-	t.Parallel()
-	task := models.Task{
-		BaseEntity: models.BaseEntity{ID: "t1"},
-		TokenUsage: 42,
+// The shared recorder preserves cache details when an agent reports them.
+func TestTokenUsagePreservesCacheDetails(t *testing.T) {
+	tokens := &fakeTokenStore{}
+	sink := &mockEventSink{}
+	w := &Worker{tokenStore: tokens, sink: sink}
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "task"}}
+	w.RecordTaskTokenUsage(context.Background(), task, 15, gateway.UsageDetails{CachedTokens: 8, CacheWriteTokens: 3})
+	if len(tokens.detailsCalls) != 1 || tokens.detailsCalls[0].CachedTokens != 8 || tokens.detailsCalls[0].CacheWriteTokens != 3 {
+		t.Fatalf("details = %+v", tokens.detailsCalls)
 	}
-	raw, err := json.Marshal(task)
+	for _, event := range sink.events {
+		if event.Type == models.EventTypeTokenUsage && event.Payload == `{"tokens":15,"cached_tokens":8,"cache_write_tokens":3}` {
+			return
+		}
+	}
+	t.Fatalf("events = %+v, want cache details", sink.events)
+}
+
+func TestTokenUsageAPIResponseIncludesField(t *testing.T) {
+	raw, err := json.Marshal(models.Task{BaseEntity: models.BaseEntity{ID: "t1"}, TokenUsage: 42})
 	if err != nil {
-		t.Fatalf("marshal task: %v", err)
+		t.Fatal(err)
 	}
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	var value map[string]any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		t.Fatal(err)
 	}
-	v, ok := m["token_usage"]
-	if !ok {
-		t.Fatal("token_usage field missing from Task JSON")
-	}
-	if int(v.(float64)) != 42 {
-		t.Errorf("token_usage = %v, want 42", v)
-	}
-}
-
-// TestTokenUsage_AgenticPath_SurfacesCacheFieldsInEvent verifies that
-// prompt-cache usage details (M15) ride along the agentic TOKEN_USAGE event
-// payload and the additive AddUsageDetails store seam.
-func TestTokenUsage_AgenticPath_SurfacesCacheFieldsInEvent(t *testing.T) {
-	t.Parallel()
-	ts := &fakeTokenStore{}
-	sink := &mockEventSink{}
-	gw := &sequenceGateway{responses: []gateway.AIResponse{
-		{
-			Content:    "[COMPLETED] done",
-			TokenUsage: 15,
-			UsageDetails: &gateway.UsageDetails{
-				CachedTokens:     8,
-				CacheWriteTokens: 3,
-			},
-		},
-	}}
-	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{}}
-	_, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
-	w.tokenStore = ts
-	w.sink = sink
-
-	w.Process(context.Background(), task)
-
-	var found bool
-	for _, ev := range sink.events {
-		if ev.Type == models.EventTypeTokenUsage {
-			found = true
-			// json.Marshal of models.TokenUsagePayload with omitempty cache fields
-			// produces keys in declaration order: tokens, cached_tokens, cache_write_tokens.
-			want := `{"tokens":15,"cached_tokens":8,"cache_write_tokens":3}`
-			if ev.Payload != want {
-				t.Errorf("payload = %q, want %q", ev.Payload, want)
-			}
-		}
-	}
-	if !found {
-		t.Fatal("expected TOKEN_USAGE event carrying cache fields")
-	}
-	// The additive AddUsageDetails seam must also receive the cache details.
-	if len(ts.detailsCalls) != 1 {
-		t.Fatalf("AddUsageDetails calls = %d, want 1", len(ts.detailsCalls))
-	}
-	if ts.detailsCalls[0].CachedTokens != 8 || ts.detailsCalls[0].CacheWriteTokens != 3 {
-		t.Errorf("AddUsageDetails details = %+v, want cached=8 write=3", ts.detailsCalls[0])
-	}
-}
-
-// TestTokenUsage_FinalTurn_SurfacesCacheFieldsInEvent verifies the
-// path threads UsageDetails through GenerateJSONWithUsage into the event payload.
-func TestTokenUsage_FinalTurn_SurfacesCacheFieldsInEvent(t *testing.T) {
-	t.Parallel()
-	ts := &fakeTokenStore{}
-	sink := &mockEventSink{}
-	gw := &singleResponseGateway{
-		resp: gateway.AIResponse{
-			Content:    "done",
-			TokenUsage: 20,
-			UsageDetails: &gateway.UsageDetails{
-				CachedTokens:     12,
-				CacheWriteTokens: 4,
-			},
-		},
-	}
-	_, w, task := newTokenUsageWorker(t, gw, ts)
-	w.sink = sink
-
-	w.Process(context.Background(), task)
-
-	var found bool
-	for _, ev := range sink.events {
-		if ev.Type == models.EventTypeTokenUsage {
-			found = true
-			want := `{"tokens":20,"cached_tokens":12,"cache_write_tokens":4}`
-			if ev.Payload != want {
-				t.Errorf("payload = %q, want %q", ev.Payload, want)
-			}
-		}
-	}
-	if !found {
-		t.Fatal("expected TOKEN_USAGE event carrying cache fields")
-	}
-	if len(ts.detailsCalls) != 1 || ts.detailsCalls[0].CachedTokens != 12 || ts.detailsCalls[0].CacheWriteTokens != 4 {
-		t.Errorf("AddUsageDetails details = %+v, want cached=12 write=4", ts.detailsCalls)
+	if value["token_usage"] != float64(42) {
+		t.Fatalf("token_usage = %v, want 42", value["token_usage"])
 	}
 }

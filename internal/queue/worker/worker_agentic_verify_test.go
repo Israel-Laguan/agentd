@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
@@ -57,55 +56,6 @@ func TestAgenticFinishAfterPassingRerunCompletes(t *testing.T) {
 	}
 }
 
-func TestAgenticLoop_ToolErrorStringStillContinuesToFinalResponse(t *testing.T) {
-	t.Parallel()
-
-	mockGateway := &sequenceGateway{
-		responses: []gateway.AIResponse{
-			{
-				Content: "I will run a command.",
-				ToolCalls: []gateway.ToolCall{
-					{ID: "call_fail", Type: "function", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"false"}`}},
-				},
-			},
-			{Content: "The command failed, so I am reporting the failure."},
-		},
-	}
-	mockSandbox := &mockAgenticSandbox{
-		results: map[string]sandbox.Result{
-			"false": {Success: false, ExitCode: 1, Stdout: "", Stderr: "boom"},
-		},
-	}
-	store := newMockAgenticStore("task-tool-error")
-	w := NewWorker(store, mockGateway, mockSandbox, nil, nil, WorkerOptions{MaxToolIterations: 5})
-
-	var recorded LoopResult
-	w.SetLoopResultRecorder(func(r LoopResult) { recorded = r })
-	w.Process(context.Background(), store.task)
-
-	if mockGateway.callCount != 2 {
-		t.Fatalf("expected model to continue after tool error with a second call, got %d calls", mockGateway.callCount)
-	}
-	if mockSandbox.executionCount != 1 {
-		t.Fatalf("expected one sandbox call, got %d", mockSandbox.executionCount)
-	}
-	if !requestContainsToolResult(mockGateway.requests[1], "call_fail", "boom") {
-		t.Fatalf("expected second request to include tool stderr in context, got %#v", mockGateway.requests[1].Messages)
-	}
-	// B-082: a final answer given after a failed command with nothing passing
-	// after it is not committed as a result; the task is retried with the
-	// failure as feedback.
-	if store.committedResult != nil && store.committedResult.Success {
-		t.Fatalf("final response after a failed command must not be committed as success, got %#v", store.committedResult)
-	}
-	if recorded.Status != LoopToolFailure || recorded.Meta.ErrorCode != agenttools.ToolErrorCodeUnverifiedCommand {
-		t.Fatalf("loop result = %s code %q, want tool_failure with %q", recorded.Status, recorded.Meta.ErrorCode, agenttools.ToolErrorCodeUnverifiedCommand)
-	}
-}
-
-// B-082's original red test: a text-only finish on a task that must change the
-// workspace, with no shell command and no file change in the run, is not
-// COMPLETED. The run has tools to produce that evidence, so it goes to a human.
 func TestAgenticTextOnlyFinishWithoutEvidenceIsNotCompleted(t *testing.T) {
 	t.Parallel()
 	gw := &sequenceGateway{responses: []gateway.AIResponse{

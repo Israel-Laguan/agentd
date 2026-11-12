@@ -25,21 +25,6 @@ func (g *sequenceGateway) ProviderSupportsChatTools(provider string) bool {
 	return strings.TrimSpace(provider) != ""
 }
 
-// maxIterationsGateway: used for max-iterations and turn-limit tests.
-func (m *maxIterationsGateway) ProviderSupportsChatTools(provider string) bool {
-	return strings.TrimSpace(provider) != ""
-}
-
-// tokenUsageGateway: used for budget / token-accounting tests.
-func (g *tokenUsageGateway) ProviderSupportsChatTools(provider string) bool {
-	return strings.TrimSpace(provider) != ""
-}
-
-// planningSequenceGateway: used for agentic planning tests.
-func (g *planningSequenceGateway) ProviderSupportsChatTools(provider string) bool {
-	return strings.TrimSpace(provider) != ""
-}
-
 // batchTrackingGateway: used for batch tests where a malformed slot re-runs as
 // a single agentic task.
 func (g *batchTrackingGateway) ProviderSupportsChatTools(provider string) bool {

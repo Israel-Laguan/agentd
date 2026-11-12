@@ -62,6 +62,7 @@ func TestHealingSplitChildrenInheritRequiresWorkspaceChange(t *testing.T) {
 	for _, flagged := range []bool{true, false} {
 		store := healingSplitStore("task-split-flag")
 		store.task.RequiresWorkspaceChange = flagged
+		store.task.RequiresWorkspaceChangeClassified = true
 		agent := &stageRecorder{output: `{"subtasks":[{"title":"a","description":"1"},{"title":"b","description":"2"}]}`}
 		w := NewWorker(store, nil, &routingTestSandbox{}, nil, &legacyHandoffSink{}, legacyCapOptions())
 		w.stageAgent = agent
@@ -73,8 +74,8 @@ func TestHealingSplitChildrenInheritRequiresWorkspaceChange(t *testing.T) {
 			t.Fatalf("flagged=%v: subtasks = %d, want 2", flagged, len(store.subtasks))
 		}
 		for _, d := range store.subtasks {
-			if d.RequiresWorkspaceChange != flagged {
-				t.Errorf("parent flagged=%v: child %q flagged=%v", flagged, d.Title, d.RequiresWorkspaceChange)
+			if d.RequiresWorkspaceChange != flagged || !d.RequiresWorkspaceChangeSet {
+				t.Errorf("parent flagged=%v, classified: child %q flagged=%v set=%v", flagged, d.Title, d.RequiresWorkspaceChange, d.RequiresWorkspaceChangeSet)
 			}
 		}
 		store.mu.Unlock()

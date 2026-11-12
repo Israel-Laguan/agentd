@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"agentd/internal/agent/acp/fakeagent"
-	"agentd/internal/config"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
@@ -43,30 +42,26 @@ func goldenFixture(t *testing.T) (*Worker, *testutil.FakeKanbanStore, models.Tas
 }
 
 func TestBatchResultCannotBypassGoldenCheck(t *testing.T) {
-	tasks := summarizeTasks(2)
-	tasks[0].SuccessCriteria = []string{"proof exists"}
-	tasks[0].GoldenCriteria = []models.GoldenCriterion{{Criterion: "proof exists", CheckCommand: "cat proof"}}
-	store := &batchTestStore{
-		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: t.TempDir()},
-		profile: models.AgentProfile{ID: "ag1", Provider: "openai", AgenticMode: true},
-		tasks:   make(map[string]models.Task), results: make(map[string]*models.TaskResult),
+	ctx := context.Background()
+	w, store, task, project, _, log := goldenFixture(t)
+	ready, err := store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateReady)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, task := range tasks {
-		store.tasks[task.ID] = task
+	script := fakeagent.Script(report(map[string]any{"summary": "another task"}))
+	other, _, err := store.EnsureProjectTask(ctx, project.ID, models.DraftTask{Title: script})
+	if err != nil {
+		t.Fatal(err)
 	}
-	w := NewWorker(store, &batchTrackingGateway{}, fixedResultSandbox{result: sandbox.Result{ExitCode: 1, Stderr: "missing"}}, nil, nil,
-		WorkerOptions{Batching: config.BatchingConfig{Enabled: true, MaxBatchSize: 2}})
-	w.ProcessBatch(context.Background(), tasks)
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if got := store.tasks[tasks[0].ID].State; got != models.TaskStateReady {
-		t.Fatalf("failed slot state = %s, want READY", got)
+	w.ProcessBatch(ctx, []models.Task{*ready, *other})
+	if got := mustGetTask(t, store, task.ID).State; got != models.TaskStateReady {
+		t.Fatalf("failed check state = %s, want READY", got)
 	}
-	if store.results[tasks[0].ID] != nil {
-		t.Fatal("failed slot committed a result")
+	if got := mustGetTask(t, store, other.ID).State; got != models.TaskStateCompleted {
+		t.Fatalf("other task state = %s, want COMPLETED", got)
 	}
-	if got := store.tasks[tasks[1].ID].State; got != models.TaskStateCompleted {
-		t.Fatalf("other slot state = %s, want COMPLETED", got)
+	if starts, _ := log.runs(); len(starts) != 2 {
+		t.Fatalf("ACP sessions = %d, want 2", len(starts))
 	}
 }
 

@@ -148,60 +148,14 @@ type DraftTask struct {
 	GoldenCriteria  []GoldenCriterion `json:"golden_criteria,omitempty"`
 	// RequiresWorkspaceChange marks a task that must change the workspace.
 	RequiresWorkspaceChange bool `json:"requires_workspace_change,omitempty"`
+	// RequiresWorkspaceChangeSet records that the field was present in the
+	// plan JSON, so materialization can tell an explicit false (text-only) from
+	// an omitted field (unclassified, which keeps write access).
+	RequiresWorkspaceChangeSet bool `json:"-"`
 	// SplitChild marks a draft created by the split stage, so the store links
 	// it to its parent with a SPLIT relation instead of an ordinary BLOCKS
 	// dependency. It is never read from plan JSON.
 	SplitChild bool `json:"-"`
-}
-
-// GoldenCriterion names a success criterion and the controller's check for it.
-type GoldenCriterion struct {
-	Criterion    string `json:"criterion"`
-	CheckCommand string `json:"check_command"`
-}
-
-// UnmarshalJSON accepts snake_case and legacy camel-case keys.
-func (g *GoldenCriterion) UnmarshalJSON(data []byte) error {
-	type alias GoldenCriterion
-	var raw struct {
-		alias
-		CriterionLegacy    string `json:"Criterion"`
-		CheckCommandLegacy string `json:"CheckCommand"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	*g = GoldenCriterion(raw.alias)
-	if g.Criterion == "" {
-		g.Criterion = raw.CriterionLegacy
-	}
-	if g.CheckCommand == "" {
-		g.CheckCommand = raw.CheckCommandLegacy
-	}
-	return nil
-}
-
-// ValidateGoldenCriteria rejects missing commands, unknown criteria, and
-// duplicate checks, which would otherwise give a misleading progress count.
-func ValidateGoldenCriteria(criteria []string, golden []GoldenCriterion) error {
-	allowed := make(map[string]bool, len(criteria))
-	for _, c := range criteria {
-		allowed[c] = true
-	}
-	seen := make(map[string]bool, len(golden))
-	for _, g := range golden {
-		if strings.TrimSpace(g.Criterion) == "" || !allowed[g.Criterion] {
-			return fmt.Errorf("golden criterion %q must name a success criterion", g.Criterion)
-		}
-		if strings.TrimSpace(g.CheckCommand) == "" {
-			return fmt.Errorf("golden criterion %q requires a check command", g.Criterion)
-		}
-		if seen[g.Criterion] {
-			return fmt.Errorf("duplicate golden criterion %q", g.Criterion)
-		}
-		seen[g.Criterion] = true
-	}
-	return nil
 }
 
 // UnmarshalJSON accepts both proposal snake_case and legacy camel-case keys.
@@ -223,6 +177,10 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*d = DraftTask(raw.alias)
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) == nil {
+		_, d.RequiresWorkspaceChangeSet = fields["requires_workspace_change"]
+	}
 	if d.ReferenceID == "" {
 		d.ReferenceID = raw.ReferenceIDLegacy
 	}
@@ -251,6 +209,20 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 		d.GoldenCriteria = append([]GoldenCriterion(nil), raw.GoldenCriteriaLegacy...)
 	}
 	return nil
+}
+
+// MarshalJSON keeps an explicit requires_workspace_change:false, which omitempty
+// would drop, so a returned plan still materializes as text-only.
+func (d DraftTask) MarshalJSON() ([]byte, error) {
+	type alias DraftTask
+	out := struct {
+		alias
+		RequiresWorkspaceChange *bool `json:"requires_workspace_change,omitempty"`
+	}{alias: alias(d)}
+	if d.RequiresWorkspaceChange || d.RequiresWorkspaceChangeSet {
+		out.RequiresWorkspaceChange = &d.RequiresWorkspaceChange
+	}
+	return json.Marshal(out)
 }
 
 // ID returns the canonical draft-local task identifier.

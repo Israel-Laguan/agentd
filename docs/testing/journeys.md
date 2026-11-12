@@ -34,7 +34,7 @@ Rationale:
 
 | Profile | When | agentd service | port | config changes |
 | --- | --- | --- | --- | --- |
-| default | J01-J06, J13-J15, J17, J19-J22 (standard) | agentd | 8765 | none, except `mcp.enabled: true` in `devenv/agentd/config.yaml` for J15 — the product default is off, so the `/mcp` route is not registered without it — and `sandbox.scrub_patterns: ["E2E-SCRUB-[0-9]{6}"]` for J17, which matches only J17's token, and a small `queue.agentic_context` for J20 (only agentic tasks read it) |
+| default | J01-J06, J13-J15, J17, J20-J22 (standard) | agentd | 8765 | none, except `mcp.enabled: true` in `devenv/agentd/config.yaml` for J15 — the product default is off, so the `/mcp` route is not registered without it — and `sandbox.scrub_patterns: ["E2E-SCRUB-[0-9]{6}"]` for J17, which matches only J17's token, and a small `queue.agentic_context` for J20 (only agentic tasks read it) |
 | healing | J07 (connector failure → handoff) | agentd-healing | 8766 | `healing.enabled: true`, `outage_handoff_enabled: true` |
 | faults | J09 part A (cascade to a live secondary) | agentd-faults | 8767 | `gateway.order: [dead, secondary]` |
 | breaker | J09 parts B and C (every provider down → breaker trips; provider returns → breaker closes by itself) | agentd-brk | 8770 | `gateway.order: [dead, dead2, flaky]`, `breaker.open_timeout: 10s`, `healing.enabled: true`, `outage_handoff_enabled: true` |
@@ -42,7 +42,7 @@ Rationale:
 | tiered | J12 (tiered execution) | agentd-tiered | 8769 | `tiered.enabled: true` |
 | provider | J16 (siblings wait for a provider breaker's probe) | agentd-prb | 8771 | `gateway.order: [quota]`, `breaker.open_timeout: 10s`, `healing.enabled: true`, `outage_handoff_enabled: true` |
 | scheduler | J23 (one-shot scheduled task) | agentd-sched | 8772 | `agentic.scheduler` with `tick_interval: 2s` and one `run_after` entry, disabled at boot; J23 enables it through `<home>/.env` |
-| acp | J24 (a task on an acp agent, in the jail) | agentd-acp | 8773 | `exec.turn` routed to `kind: acp, preset: fake`; `sandbox.backend: bubblewrap`. The image is the Dockerfile's `dev` stage (agentd built with `-tags fakeacp`, plus bubblewrap) and the service runs with `security_opt: [unmask=ALL]`, or bubblewrap cannot mount `/proc` |
+| acp | J19 (ACP permission response), J24 (a task on an acp agent, in the jail) | agentd-acp | 8773 | `exec.turn` routed to `kind: acp, preset: fake`; `sandbox.backend: bubblewrap`. The image is the Dockerfile's `dev` stage (agentd built with `-tags fakeacp`, plus bubblewrap) and the service runs with `security_opt: [unmask=ALL]`, or bubblewrap cannot mount `/proc` |
 
 Implementation: devenv/compose.yaml lists all variants; test setup calls `podman compose up -d <profile>` for the needed service, after `make dev-build` has produced the `agentd:local` image those services reference.
 
@@ -121,7 +121,7 @@ path. Python unit tests for the dispatch live in
 | **J16** | Siblings wait for an in-flight provider breaker's probe instead of a handoff | 1. Start agentd-prb and point the default profile at its one provider; 2. Arm the mock's quota for `prb-quota` and materialize three arming tasks; 3. The provider breaker reaches OPEN and the arming tasks are handed off; 4. Quota off, wait out the open timeout, arm `slow_once` and materialize three more tasks; 5. While the breaker is HALF_OPEN, no task emits `PROVIDER_EXHAUSTED_HANDOFF` and no HUMAN subtask appears; 6. All three reach COMPLETED and the breaker is CLOSED | Provider breaker OPEN from real 429s; siblings wait; 3 tasks COMPLETED; breaker CLOSED with no reset after the trip | provider | The three tasks that *trip* a provider breaker are thrown away: the quota branch records the verdict **and** hands the task off, so they end BLOCKED with a HUMAN child. Only a probe admitted after `breaker.open_timeout` can show the sibling behaviour, so the asserted-on tasks are created after the timeout. Also the first end-to-end evidence for B-012 and B-013, which were inert until B-016 | P0 | results.md |
 | **J17** | Events API scrubs secrets | 1. Materialize a single-task project whose title carries `E2E-SCRUB-482913`; 2. Wait for COMPLETED; 3. `GET /api/v1/tasks/{id}/events` | No event payload contains the token; at least one carries `[REDACTED]` | default + `sandbox.scrub_patterns` | The mock's command echoes the title, so the token reaches COMMAND, LOG_CHUNK and RESULT. Before B-065 the pattern applied to the sandbox only, not to the events the API serves | P1 | B-065 |
 | **J18** | Curator curates each task once | 1. Materialize a single-task project on agentd-disk; 2. Wait for COMPLETED; 3. Wait until the task's only event is one `EVENTS_PURGED` marker; 4. Wait out three more curator passes (20s); 5. Assert the only event is still that same marker | One purge marker, same event ID, nothing re-archived | disk (retention 0, curator `@every 5s`) | Count alone would not catch B-066: a re-curation purges again and can leave one fresh marker, so the journey pins the marker's ID | P1 | B-066 |
-| **J19** | Agentic denylist refuses `sudo` | 1. Create an agentic agent profile (`litellm`/`agentd`); 2. Materialize a task on it whose description carries `@tool_calls=` scripting `bash` with `sudo id`; 3. Wait for COMPLETED; 4. Read TOOL_RESULT events, the tool use report and the mock capture. The denylist vetoes sudo before the sandbox sees it, which is a privilege block: the alternative request (mock default command) runs (the J19 gap, T-058) | Two TOOL_RESULTs: first `bash`, exit code -1, names sudo, no `uid=` output (the denylist refusal); then `bash` exit 0 running the non-privileged alternative (`executed via litellm proxy`). The next request carries the alternative's output | default | The mock answers the first agentic turn with the scripted call and the next with a final message (`devenv/mockllm/toolcalls.py`, T-053). The journey owns its profile, so no other journey turns agentic | P1 | T-053 |
+| **J19** | ACP permission response refuses `sudo` | 1. Materialize a task on the `acp` profile whose description scripts a permission request for `sudo id` (`fakeagent`); 2. Wait for the task's `ATTEMPT_HANDOFF` event; 3. Assert the event carries `permission: reject_once` | The agent sees `reject_once`, not `allow_once`; the command policy denies `sudo` before any hook runs | acp | The fake ACP agent runs in the bubblewrap jail; no model or mockllm is needed for the task | P1 | T-070 |
 | **J20** | Oversized tool result is cut, not lost | 1. As J19, scripting `bash` that prints `HEAD-MARK`, ~56 KB of filler, `TAIL-MARK`; 2. Wait for COMPLETED; 3. Read the mock capture | The task completes; the request after the call carries the result cut below its raw size, with `HEAD-MARK`, `TAIL-MARK` and the `【...】` marker (default `gateway.truncation.strategy` head_tail) | default + `queue.agentic_context` 3000/5000/2000 | Found B-079: the gateway-side agentic truncator dropped the call and its result together, so the agent looped to the iteration limit. The small `agentic_context` is needed: with product defaults (60000) the gateway's head-only agentic cut (12000) runs first and the configured strategy never applies | P1 | T-053, B-079 |
 | **J21** | A repeated read is counted | 1. As J19, scripting `bash` (`echo hello > notes.txt`) then `read notes.txt` twice; 2. Wait for COMPLETED; 3. Read the task's tool use report | Two reads, one repeated read of `notes.txt` with 2 reads, and non-zero re-read bytes | default | The baseline for later "don't re-read files" work; nothing deduplicates yet | P2 | T-044 |
 | **J22** | `agentd report ai` inside the container | 1. As J19 with `uname -a` scripted; 2. Wait for COMPLETED and the ai-usage report row for `exec.turn`; 3. `podman compose exec agentd agentd report ai --group-by purpose --task <id>` | The CLI prints a `PURPOSE` table with an `exec.turn` row whose CALLS equals the API's calls | default | Uses `DevenvManager.Exec`; `execTurnRow` supplies the API comparison | P2 | T-058 |
@@ -141,7 +141,7 @@ path. Python unit tests for the dispatch live in
 | J17 | The token is in the agent's summary, so it reaches `RESULT` (no `COMMAND` or `LOG_CHUNK`). |
 | J18, J23 | Completed script (J23's in the scheduler entry's `description_template`). |
 
-Not ported, still on the builtin until T-070/T-071 (owner, 2026-11-09): J07, J09 part B, J16 assert gateway failures on the exec call (a dead provider, a 429), which an ACP agent never makes: the clarify step's gateway errors are logged and skipped. They stay on their own profiles (`healing`, `breaker`, `provider`), unchanged, and move to `_harness/` in T-071 with J12 and J19–J21. J09 part A (chat cascade) runs no task and is unchanged. J19–J22 keep the builtin on the `default` profile because their agent profile pins a provider and model.
+Not ported: `TestJ07_HealingHandoff`, `TestJ09_BreakerOpens`, `TestJ12_TieredExecution`, `TestJ16_SiblingsWaitForProviderProbe`, `TestJ20_AgenticOversizedToolResultIsCut`, `TestJ21_AgenticRepeatedReadIsCounted`, and `TestJ22_AgentdReportAIInsideContainer` are skipped ("moves in T-071"). They previously ran on the builtin loop, which dispatch no longer calls. `TestJ09_ProviderCascade` exercises chat and still runs. J19 is ported to the ACP path as `TestJ19_ACPPermissionRefusesSudo`.
 
 ---
 
@@ -151,7 +151,7 @@ Not ported, still on the builtin until T-070/T-071 (owner, 2026-11-09): J07, J09
 - J02: board + SSE (2 runs)
 - J03: chat-only response (2 runs)
 - J04: full happy path (2 runs)
-- J07: HUMAN handoff (2 runs)
+- J07: HUMAN handoff (2 runs) — **deferred until T-071** (the test is skipped as `moves in T-071`)
 - J08: unclean restart recovery (2 runs)
 - J09: cascade (faults) + breaker trip (breaker) (2 runs)
 - J10: disk watchdog dedup (2 runs)
@@ -160,9 +160,11 @@ Not ported, still on the builtin until T-070/T-071 (owner, 2026-11-09): J07, J09
 
 ## T-026 Status: Complete
 
-All eleven P0 journeys (10 distinct journeys, J09 is two tests) are
-implemented and pass under stress: **J01, J02, J03, J04, J07, J08, J09
-(cascade + breaker), J10, J11, J14**. Verified 4 consecutive runs on one
+All eleven P0 journeys (10 distinct journeys, J09 is two tests) were
+implemented and passed under stress (historical): **J01, J02, J03, J04, J08,
+J09 (cascade + breaker), J10, J11, J14**. J07 and the J09 breaker test were
+skipped in T-071 (`moves in T-071`), so the P0 exit criteria are not met
+until they are ported. Verified 4 consecutive runs on one
 stack with zero failures, zero SQLITE_BUSY, and TOKEN_USAGE rows durable
 (0→26 projects, 0→29 tasks, 0→76 token events).
 
@@ -299,6 +301,6 @@ shows both a verify-step and an escalate-step request.
 
 ## Todos for T-026, T-027, T-028
 
-**T-027** (run and triage): done. P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; P1 journeys J05, J12, J13 and J15 are implemented and passing, and J06 is deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`, B-005, B-006. Filed (now resolved): B-001, B-002 (fixed), B-003 (closed as not a bug; see results.md). `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 pass. Cycle entries are in `results-history.md`.
+**T-027** (run and triage): done, except J07. P0 journeys passed on repeated clean runs and on 4 consecutive runs against one accumulating stack **before J07, the J09 breaker test and J12 were skipped in T-071** (historical results); currently passing P0 are J01, J02, J03, J04, J08, J09 cascade, J10, J11, J14, so J07 and the J09 breaker test must be ported before the exit criteria are met. P1 journeys J05, J13 and J15 are passing (J12 is skipped until T-071 ports it), and J06 is deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`, B-005, B-006. Filed (now resolved): B-001, B-002 (fixed), B-003 (closed as not a bug; see results.md). `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 passed before the T-071 deferral. Cycle entries are in `results-history.md`.
 
 **T-028** (mock scenarios): done. Request capture (`GET /requests`), the published mock port, per-request scenario selection (in-band `@scenario=` tag, `X-Mock-Scenario` header, or model name via `MOCKLLM_MODEL_SCENARIOS`), error/latency responses, and tiered step replies (each step detected from its system-prompt suffix; verify fails by default) all land. Python unit tests for the dispatch run under `make check` (`devenv/mockllm/test_server.py`). **J12 is the only consumer** of the tiered replies and is now implemented.

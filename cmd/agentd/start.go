@@ -12,6 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"agentd/internal/config"
+	"agentd/internal/gateway"
+	"agentd/internal/gateway/route"
 	"agentd/internal/kanban"
 	"agentd/internal/mcp"
 	"agentd/internal/models"
@@ -117,11 +119,22 @@ func seedAndValidateStartup(ctx context.Context, store *kanban.Store, cfg config
 	if err := requireStartupProviders(cfg.Gateway); err != nil {
 		return err
 	}
+	warnMissingExecutionRoute(cfg.Gateway.Routing)
 	if err := queue.ValidateToolCredentials(cfg.Agentic.ToolCredentials); err != nil {
 		return fmt.Errorf("agentic.tool_credentials: %w", err)
 	}
 	slog.Debug("tool credentials validated")
 	return nil
+}
+
+func warnMissingExecutionRoute(routes route.Table) {
+	for _, writes := range []bool{false, true} {
+		d := routes.Resolve(gateway.PurposeExecTurn, "", gateway.AttrsForTask(writes))
+		if agent, ok := routes.Agents[d.Agent]; ok && agent.Kind == route.KindACP {
+			return
+		}
+	}
+	slog.Warn("no ACP agent routed for exec.turn; execution tasks require an external agent")
 }
 
 type startOptions struct {

@@ -28,11 +28,11 @@ func InsertTask(ctx context.Context, tx SQLExecutor, tempID string, task models.
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO tasks (
 			id, project_id, agent_id, title, description, state, assignee,
-			os_process_id, started_at, completed_at, last_heartbeat, retry_count, token_usage, cached_token_usage, cache_write_token_usage, success_criteria, golden_criteria, criteria_met, requires_workspace_change, created_at, updated_at
+			os_process_id, started_at, completed_at, last_heartbeat, retry_count, token_usage, cached_token_usage, cache_write_token_usage, success_criteria, golden_criteria, criteria_met, requires_workspace_change, requires_workspace_change_classified, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, task.ProjectID, task.AgentID, task.Title, task.Description, string(task.State), string(task.Assignee),
-		nil, nil, nil, nil, task.RetryCount, task.TokenUsage, task.CachedTokenUsage, task.CacheWriteTokenUsage, successCriteria, string(goldenJSON), "[]", task.RequiresWorkspaceChange, FormatTime(task.CreatedAt), FormatTime(task.UpdatedAt))
+		nil, nil, nil, nil, task.RetryCount, task.TokenUsage, task.CachedTokenUsage, task.CacheWriteTokenUsage, successCriteria, string(goldenJSON), "[]", task.RequiresWorkspaceChange, task.RequiresWorkspaceChangeClassified, FormatTime(task.CreatedAt), FormatTime(task.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert task %q: %w", tempID, err)
 	}

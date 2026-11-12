@@ -13,19 +13,20 @@ import (
 // taskScanValues holds raw column values during a task row scan before
 // applying type conversions.
 type taskScanValues struct {
-	task            *models.Task
-	createdAt       string
-	updatedAt       string
-	state           string
-	assignee        string
-	startedAt       sql.NullString
-	completedAt     sql.NullString
-	lastHeartbeat   sql.NullString
-	osPID           sql.NullInt64
-	successCriteria string
-	goldenCriteria  string
-	criteriaMet     string
-	requiresChange  bool
+	task                     *models.Task
+	createdAt                string
+	updatedAt                string
+	state                    string
+	assignee                 string
+	startedAt                sql.NullString
+	completedAt              sql.NullString
+	lastHeartbeat            sql.NullString
+	osPID                    sql.NullInt64
+	successCriteria          string
+	goldenCriteria           string
+	criteriaMet              string
+	requiresChange           bool
+	requiresChangeClassified bool
 }
 
 func scanTaskValues(row Scanner, values *taskScanValues) error {
@@ -33,7 +34,7 @@ func scanTaskValues(row Scanner, values *taskScanValues) error {
 	err := row.Scan(
 		&t.ID, &t.ProjectID, &t.AgentID, &t.Title, &t.Description, &values.state, &values.assignee,
 		&values.osPID, &values.startedAt, &values.completedAt, &values.lastHeartbeat, &t.RetryCount, &t.TokenUsage, &t.CachedTokenUsage, &t.CacheWriteTokenUsage,
-		&values.successCriteria, &values.goldenCriteria, &values.criteriaMet, &values.requiresChange, &values.createdAt, &values.updatedAt,
+		&values.successCriteria, &values.goldenCriteria, &values.criteriaMet, &values.requiresChange, &values.requiresChangeClassified, &values.createdAt, &values.updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return models.ErrTaskNotFound
@@ -67,6 +68,7 @@ func (v *taskScanValues) apply() error {
 		return fmt.Errorf("decode criteria met: %w", err)
 	}
 	v.task.RequiresWorkspaceChange = v.requiresChange
+	v.task.RequiresWorkspaceChangeClassified = v.requiresChangeClassified
 	return applyEntityTimes(v.task, v.createdAt, v.updatedAt)
 }
 

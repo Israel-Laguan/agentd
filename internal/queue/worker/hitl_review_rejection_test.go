@@ -5,9 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"agentd/internal/gateway"
+	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
 
@@ -19,23 +18,14 @@ func TestProcess_AgenticRequireReview_RejectionMarkedOnlyAfterDraft(t *testing.T
 
 	const rejectionComment = "Please add error handling"
 	const revisedDraft = "revised draft with error handling"
-	gw := &sequenceGateway{
-		responses: []gateway.AIResponse{
-			{
-				Content: "I'll check the workspace first.",
-				ToolCalls: []gateway.ToolCall{{
-					ID: "call_reject_1", Type: "function",
-					Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command": "pwd"}`},
-				}},
-			},
-			{Content: revisedDraft},
-		},
-	}
-	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
-		"pwd": {Success: true, ExitCode: 0, Stdout: "/tmp\n"},
-	}}
-	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
+	rt, _, log := acpRuntime(t)
+	w := NewWorker(store, nil, &mockAgenticSandbox{}, nil, nil, WorkerOptions{Routes: acpRoutes(), ACP: rt})
 	task := materializeLegacyReviewTask(t, store, ctx, "agentic-review-reject", "task-agentic-review-reject")
+	updated, err := store.UpdateTaskDescription(ctx, task.ID, task.UpdatedAt, task.Description+"\n"+fakeagent.Script(report(map[string]any{"summary": revisedDraft})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task = *updated
 	w.createReviewHandoff(ctx, task, "first draft output")
 	failReviewWithComment(t, store, ctx, task.ID, rejectionComment)
 	review := findReviewSubtask(t, store, ctx, task.ID)
@@ -43,8 +33,8 @@ func TestProcess_AgenticRequireReview_RejectionMarkedOnlyAfterDraft(t *testing.T
 
 	w.Process(ctx, queued)
 
-	if gw.callCount != 2 {
-		t.Fatalf("gateway calls = %d, want 2 (tool turn + final draft)", gw.callCount)
+	if starts, _ := log.runs(); len(starts) != 1 {
+		t.Fatalf("ACP sessions = %d, want 1", len(starts))
 	}
 	comments, err := store.ListComments(ctx, task.ID)
 	if err != nil {

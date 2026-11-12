@@ -141,7 +141,8 @@ func TestClinePresetWritesItsSettingsAndRulesIntoTheHome(t *testing.T) {
 	config := filepath.Join(home, ".cline")
 	settings := filepath.Join(config, "data/settings/cline_mcp_settings.json")
 	if !slices.Equal(argv[len(argv)-4:], []string{"/opt/cline/bin/.cline", "--acp", "--config", config}) ||
-		envOf(argv)["CLINE_MCP_SETTINGS_PATH"] != settings || envOf(argv)["CLINE_MODEL"] != "vendor/free-model:free" {
+		envOf(argv)["CLINE_MCP_SETTINGS_PATH"] != settings || envOf(argv)["CLINE_MODEL"] != "vendor/free-model:free" ||
+		envOf(argv)["CLINE_PROVIDER"] != "cline" {
 		t.Fatalf("argv = %q", argv)
 	}
 	if p := Presets["cline"]; !slices.Equal(p.Allow, []string{"api.cline.bot:443", "data.cline.bot:443"}) || !p.ModelOption || !p.NoUsage {
@@ -174,6 +175,59 @@ func TestClinePresetCopiesOnlyItsLoginInTheUsersSchema(t *testing.T) {
 	}
 	if modes, ok := providers["modes"].(map[string]any); !ok || len(modes) != 0 || providers["version"] != float64(1) {
 		t.Fatalf("providers.json modes %v, version %v; want the user's", providers["modes"], providers["version"])
+	}
+}
+
+// A ClinePass login is copied next to cline's, whose auth storage it shares,
+// and is the one cline uses.
+func TestClinePresetPrefersTheClinePassLogin(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	creds := filepath.Join(t.TempDir(), "providers.json")
+	writeFile(t, creds, `{"version": 1, "lastUsedProvider": "cline", "modes": {}, "providers": {
+		"cline": {"settings": {"provider": "cline", "auth": {"accessToken": "CL-TOKEN"}}},
+		"cline-pass": {"settings": {"provider": "cline-pass", "auth": {"accessToken": "PASS-TOKEN"}}},
+		"openrouter": {"settings": {"provider": "openrouter", "auth": {"apiKey": "OR-KEY"}}}}}`)
+	argv, err := Presets["cline"].Home(Launch{Home: home, Model: "cline-free/solar-mini4", Credentials: creds, MCPURL: "http://127.0.0.1:3129/mcp/abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envOf(argv)["CLINE_PROVIDER"] != "cline-pass" {
+		t.Fatalf("argv = %q; want CLINE_PROVIDER=cline-pass", argv)
+	}
+	providers := readJSON(t, filepath.Join(home, ".cline/data/settings/providers.json"))
+	byName, _ := providers["providers"].(map[string]any)
+	if len(byName) != 2 || byName["cline"] == nil || byName["cline-pass"] == nil || providers["lastUsedProvider"] != "cline-pass" {
+		t.Fatalf("providers.json keeps %v, last used %v; want cline and cline-pass, last cline-pass", keys(byName), providers["lastUsedProvider"])
+	}
+	// Each provider keeps its own credential: the login cline uses is the
+	// ClinePass token, not cline's.
+	pass, _ := byName["cline-pass"].(map[string]any)
+	settings, _ := pass["settings"].(map[string]any)
+	auth, _ := settings["auth"].(map[string]any)
+	if auth["accessToken"] != "PASS-TOKEN" {
+		t.Fatalf("cline-pass auth = %v, want the ClinePass token", pass)
+	}
+}
+
+func TestClinePresetAcceptsAClinePassOnlyLogin(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	creds := filepath.Join(t.TempDir(), "providers.json")
+	writeFile(t, creds, `{"version": 1, "lastUsedProvider": "openrouter", "modes": {}, "providers": {
+		"cline-pass": {"settings": {"provider": "cline-pass", "auth": {"accessToken": "PASS-TOKEN"}}},
+		"openrouter": {"settings": {"provider": "openrouter", "auth": {"apiKey": "OR-KEY"}}}}}`)
+	argv, err := Presets["cline"].Home(Launch{Home: home, Model: "cline-free/solar-mini4", Credentials: creds, MCPURL: "http://127.0.0.1:3129/mcp/abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envOf(argv)["CLINE_PROVIDER"] != "cline-pass" {
+		t.Fatalf("argv = %q; want CLINE_PROVIDER=cline-pass", argv)
+	}
+	providers := readJSON(t, filepath.Join(home, ".cline/data/settings/providers.json"))
+	byName, _ := providers["providers"].(map[string]any)
+	if len(byName) != 1 || byName["cline-pass"] == nil || providers["lastUsedProvider"] != "cline-pass" {
+		t.Fatalf("providers.json keeps %v, last used %v; want only cline-pass, last cline-pass", keys(byName), providers["lastUsedProvider"])
 	}
 }
 

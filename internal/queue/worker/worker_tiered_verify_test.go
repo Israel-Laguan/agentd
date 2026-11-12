@@ -136,7 +136,7 @@ func TestTieredVerify_FailRoutesToMidFix(t *testing.T) {
 		Tiered:            config.TieredConfig{Escalation: config.TieredEscalationConfig{MaxMidFix: 2, MaxEscalate: 1}},
 	})
 
-	w.Process(context.Background(), verify)
+	runLegacyTieredTest(t, context.Background(), w, verify)
 
 	if got := countSpawnedByTitlePrefix(t, store, origin.ID, midFixTitlePrefix); got != 1 {
 		t.Fatalf("mid-fix children after verify fail = %d, want 1", got)
@@ -183,7 +183,7 @@ func TestTieredVerify_ConflictRoutesToEscalation(t *testing.T) {
 		Tiered:            config.TieredConfig{Escalation: config.TieredEscalationConfig{MaxMidFix: 2, MaxEscalate: 1}},
 	})
 
-	w.Process(context.Background(), verify)
+	runLegacyTieredTest(t, context.Background(), w, verify)
 
 	if got := countSpawnedByAgentID(t, store, origin.ID, escalateAgentID); got != 1 {
 		t.Fatalf("escalate children after verify conflict = %d, want 1", got)
@@ -198,13 +198,13 @@ func TestTieredVerify_PassCompletesOrigin(t *testing.T) {
 	sb := &mockAgenticSandbox{}
 	w := NewWorker(store, gw, sb, nil, &storeEventSink{store: store}, WorkerOptions{MaxToolIterations: 10})
 
-	w.Process(context.Background(), verify)
+	runLegacyTieredTest(t, context.Background(), w, verify)
 
 	ctx := context.Background()
 	// The verify completion unblocks the origin (BLOCKED → READY).
 	// Processing the origin triggers tryResolveTieredOrigin which
 	// completes the pipeline.
-	w.Process(ctx, origin)
+	runLegacyTieredTest(t, ctx, w, origin)
 
 	current, err := store.GetTask(ctx, origin.ID)
 	if err != nil {
